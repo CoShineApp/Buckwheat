@@ -9,6 +9,19 @@ edition = "2021"
 name = "peppi_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+# Enable real screen recording (requires Xcode on macOS, VS on Windows)
+real-recording = [
+    "screencapturekit",
+    "windows-record",
+    "objc",
+    "core-foundation",
+    "core-media-rs",
+    "core-video-rs",
+    "core-graphics",
+]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -25,8 +38,17 @@ thiserror = "2.0"
 chrono = "0.4"
 log = "0.4"
 
-# Windows-specific recording (commented for now, will be enabled when implementing)
-# This is since we are using the dope `windows-record` rust lib from Ascent <3
-# [target.'cfg(windows)'.dependencies]
-# windows-record = "0.1"
+# Windows-specific recording using the dope `windows-record` rust lib from Ascent <3
+# Only required when "real-recording" feature is enabled
+[target.'cfg(windows)'.dependencies]
+windows-record = { git = "https://github.com/judehek/windows-record", branch = "main", optional = true }
 
+# MacOS-specific recording using screencapturekit-rs crate
+# Only required when "real-recording" feature is enabled
+[target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = { git = "https://github.com/doom-fish/screencapturekit-rs", optional = true }
+objc = { version = "0.2", optional = true }
+core-foundation = { version = "0.10", optional = true }
+core-media-rs = { version = "0.3", optional = true }
+core-video-rs = { version = "0.3", optional = true }
+core-graphics = { version = "0.25", optional = true }

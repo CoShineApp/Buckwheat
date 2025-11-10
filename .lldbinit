@@ -1,0 +1,20 @@
+# Rust pretty printing for LLDB
+# This makes debug values more readable
+
+# Enable Rust pretty printing
+settings set target.process.thread.step-avoid-regexp ^(?!.*rust_panic).*$
+
+# Better display for Option and Result types
+type summary add -x "^alloc::option::Option<.*>$" --summary-string "${var.some}"
+type summary add -x "^core::option::Option<.*>$" --summary-string "${var.some}"
+type summary add -x "^core::result::Result<.*>$" --summary-string "${var.Ok}"
+
+# Display for Vec
+type summary add -x "^alloc::vec::Vec<.*>$" --summary-string "vec(${var.len} items)"
+
+# Display for String
+type summary add -x "^alloc::string::String$" --summary-string "${var.data_ptr}"
+
+# Display for &str
+type summary add -x "^&str$" --summary-string "${var.data_ptr}"
+

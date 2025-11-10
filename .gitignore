@@ -43,6 +43,7 @@ src-tauri/gen
 # Cursor
 .cursorrules
 CLAUDE
+.claude
 
 # OS
 .DS_Store

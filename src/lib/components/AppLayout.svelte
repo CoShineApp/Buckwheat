@@ -14,10 +14,11 @@
 		SidebarProvider,
 		SidebarTrigger
 	} from "$lib/components/ui/sidebar";
-	import { Home, Settings, Moon, Sun } from "@lucide/svelte";
+	import { Home, Settings, Moon, Sun, Circle } from "@lucide/svelte";
 	import type { Snippet } from "svelte";
 	import { navigation } from "$lib/stores/navigation.svelte";
 	import { settings } from "$lib/stores/settings.svelte";
+	import { recording } from "$lib/stores/recording.svelte";
 	import { onMount } from "svelte";
 
 	let sidebarOpen = $state(true);
@@ -71,6 +72,12 @@
 							<span class="truncate font-semibold">Peppi</span>
 							<span class="truncate text-xs">Slippi Recorder</span>
 						</div>
+						{#if recording.isRecording}
+							<div class="flex items-center gap-1.5">
+								<Circle class="size-2 animate-pulse fill-red-500 text-red-500" />
+								<span class="text-xs font-medium text-red-500">LIVE</span>
+							</div>
+						{/if}
 					</SidebarMenuButton>
 				</SidebarMenuItem>
 			</SidebarMenu>

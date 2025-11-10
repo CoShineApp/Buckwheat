@@ -2,7 +2,6 @@ pub mod slippi_paths;
 
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::PathBuf;
-use std::sync::mpsc::channel;
 use crate::commands::errors::Error;
 
 pub struct GameDetector {
@@ -19,8 +18,6 @@ impl GameDetector {
     }
 
     pub fn start_watching(&mut self) -> Result<(), Error> {
-        let (tx, _rx) = channel();
-
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             match res {
                 Ok(event) => {
@@ -28,14 +25,16 @@ impl GameDetector {
                         for path in event.paths {
                             if let Some(ext) = path.extension() {
                                 if ext == "slp" {
-                                    println!("New Slippi replay detected: {:?}", path);
-                                    tx.send(path).ok();
+                                    log::info!("🎮 New Slippi replay detected: {:?}", path);
+                                    // TODO: Implement automatic recording triggering
+                                    // Need to test if .slp files are created BEFORE game finishes
+                                    // For now, manual recording via start_recording/stop_recording commands
                                 }
                             }
                         }
                     }
                 }
-                Err(e) => println!("Watch error: {:?}", e),
+                Err(e) => log::error!("❌ Watch error: {:?}", e),
             }
         })
         .map_err(|e| Error::WatchError(e.to_string()))?;
@@ -45,14 +44,14 @@ impl GameDetector {
             .map_err(|e| Error::WatchError(e.to_string()))?;
 
         self.watcher = Some(Box::new(watcher));
-        println!("Started watching: {:?}", self.slippi_path);
+        log::info!("👀 Started watching for .slp files: {:?}", self.slippi_path);
 
         Ok(())
     }
 
     pub fn stop_watching(&mut self) {
         self.watcher = None;
-        println!("Stopped watching");
+        log::info!("⏹️  Stopped watching for .slp files");
     }
 }
 
