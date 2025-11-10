@@ -2,16 +2,15 @@
 	import { Button } from "$lib/components/ui/button";
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card";
 	import { recording } from "$lib/stores/recording.svelte";
+	import { handleTauriError, showSuccess } from "$lib/utils/errors";
 	import { invoke } from "@tauri-apps/api/core";
 	import { Play, Square } from "@lucide/svelte";
 
 	let isStarting = $state(false);
 	let isStopping = $state(false);
-	let error = $state<string | null>(null);
 	let lastRecordingPath = $state<string | null>(null);
 
 	async function startRecording() {
-		error = null;
 		isStarting = true;
 
 		try {
@@ -21,25 +20,24 @@
 			await invoke("start_recording", { outputPath });
 			recording.start();
 			lastRecordingPath = outputPath;
+			showSuccess("Recording started");
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-			console.error("Failed to start recording:", e);
+			handleTauriError(e, "Failed to start recording");
 		} finally {
 			isStarting = false;
 		}
 	}
 
 	async function stopRecording() {
-		error = null;
 		isStopping = true;
 
 		try {
 			const path = await invoke<string>("stop_recording");
 			recording.stop();
 			lastRecordingPath = path;
+			showSuccess("Recording stopped");
 		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-			console.error("Failed to stop recording:", e);
+			handleTauriError(e, "Failed to stop recording");
 		} finally {
 			isStopping = false;
 		}
@@ -85,12 +83,6 @@
 					<p class="mt-1 text-sm text-muted-foreground">
 						Check the sidebar for the live indicator
 					</p>
-				</div>
-			{/if}
-
-			{#if error}
-				<div class="rounded-lg border border-destructive bg-destructive/10 p-4">
-					<p class="text-sm font-medium text-destructive">Error: {error}</p>
 				</div>
 			{/if}
 
