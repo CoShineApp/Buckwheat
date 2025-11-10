@@ -3,7 +3,7 @@ mod commands;
 mod game_detector;
 mod recorder;
 use commands::default::{read, write};
-use commands::settings::{get_settings_path, open_settings_folder};
+use commands::settings::{get_recording_directory, get_setting, get_settings_path, open_settings_folder};
 use commands::slippi::{
     get_default_slippi_path, get_recordings, start_recording, start_watching, stop_recording,
     stop_watching,
@@ -39,7 +39,9 @@ pub fn run() {
             stop_recording,
             get_recordings,
             get_settings_path,
-            open_settings_folder
+            open_settings_folder,
+            get_setting,
+            get_recording_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

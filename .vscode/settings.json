@@ -3,5 +3,15 @@
         "activityBar.background": "#0F1F82",
         "titleBar.activeBackground": "#142BB6",
         "titleBar.activeForeground": "#F9F9FE"
-    }
+    },
+    "lldb.launch.expressions": "native",
+    "lldb.displayFormat": "auto",
+    "lldb.showDisassembly": "never",
+    "lldb.dereferencePointers": true,
+    "lldb.evaluateForHovers": true,
+    "lldb.consoleMode": "commands",
+    "debug.allowBreakpointsEverywhere": true,
+    "rust-analyzer.inlayHints.enable": true,
+    "rust-analyzer.inlayHints.typeHints": true,
+    "rust-analyzer.inlayHints.parameterHints": true
 }

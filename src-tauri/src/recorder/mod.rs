@@ -17,7 +17,7 @@ pub trait Recorder {
 pub fn get_recorder() -> Box<dyn Recorder + Send> {
     #[cfg(all(target_os = "macos", feature = "real-recording"))]
     {
-        log::info!("🍎 Initializing MacOS recorder with scap (real-recording enabled)");
+        log::info!("🍎 Initializing MacOS recorder with screencapturekit-rs (real-recording enabled)");
         Box::new(macos::MacOSRecorder::new())
     }
 

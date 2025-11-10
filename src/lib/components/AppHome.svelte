@@ -14,8 +14,13 @@
 		isStarting = true;
 
 		try {
+			// Get recording directory (handles defaults and creates directory if needed)
+			const recordingDir = await invoke<string>("get_recording_directory");
+			
+			// Generate filename with timestamp
 			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-			const outputPath = `/tmp/recording-${timestamp}.mp4`;
+			const filename = `recording-${timestamp}.mp4`;
+			const outputPath = `${recordingDir}/${filename}`;
 			
 			await invoke("start_recording", { outputPath });
 			recording.start();
