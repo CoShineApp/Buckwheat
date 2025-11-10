@@ -73,8 +73,7 @@ export function handleTauriError(
 	console.error(fullMessage, error);
 	
 	toast.error(fullMessage, {
-		duration: 5000,
-		closeButton: true
+		duration: 5000
 	});
 }
 
