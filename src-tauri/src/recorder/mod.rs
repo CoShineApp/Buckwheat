@@ -23,8 +23,8 @@ pub fn get_recorder() -> Box<dyn Recorder + Send> {
 
     #[cfg(target_os = "windows")]
     {
-        log::info!("🪟 Initializing Windows recorder (currently using mock)");
-        Box::new(mock::MockRecorder::new())
+        log::info!("🪟 Initializing Windows recorder with windows-record");
+        Box::new(windows::WindowsRecorder::new())
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]

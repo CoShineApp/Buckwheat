@@ -25,10 +25,9 @@ thiserror = "2.0"
 chrono = "0.4"
 log = "0.4"
 
-# Windows-specific recording (commented for now, will be enabled when implementing)
-# This is since we are using the dope `windows-record` rust lib from Ascent <3
-# [target.'cfg(windows)'.dependencies]
-# windows-record = "0.1"
+# Windows-specific recording using the dope `windows-record` rust lib from Ascent <3
+[target.'cfg(windows)'.dependencies]
+windows-record = { git = "https://github.com/judehek/windows-record", branch = "main" }
 
 # MacOS-specific recording using scap crate
 [target.'cfg(target_os = "macos")'.dependencies]
