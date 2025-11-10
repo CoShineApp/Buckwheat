@@ -80,14 +80,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
-          cache: 'npm'
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -95,10 +94,10 @@ jobs:
           targets: x86_64-pc-windows-msvc
 
       - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
+        run: bun install -g @tauri-apps/cli@latest
 
       - name: Build frontend
-        run: npm run build
+        run: bun run build
 
       - name: Build Tauri app (Windows)
         # env:
@@ -108,7 +107,7 @@ jobs:
         run: |
           # Uncomment when code signing is configured:
           # echo "$CERTIFICATE_BASE64" | base64 -d > certificate.pfx
-          npx tauri build --target x86_64-pc-windows-msvc
+          bunx tauri build --target x86_64-pc-windows-msvc
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -127,14 +126,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
-          cache: 'npm'
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -144,10 +142,10 @@ jobs:
           # targets: x86_64-apple-darwin,aarch64-apple-darwin
 
       - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
+        run: bun install -g @tauri-apps/cli@latest
 
       - name: Build frontend
-        run: npm run build
+        run: bun run build
 
       - name: Build Tauri app (macOS)
         # env:
@@ -163,7 +161,7 @@ jobs:
           # security unlock-keychain -p "$APPLE_CERTIFICATE_PASSWORD" build.keychain
           # security import <(echo "$APPLE_CERTIFICATE" | base64 -d) -k build.keychain -T /usr/bin/codesign -T /usr/bin/security
           # security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_CERTIFICATE_PASSWORD" build.keychain
-          npx tauri build --target x86_64-apple-darwin
+          bunx tauri build --target x86_64-apple-darwin
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
