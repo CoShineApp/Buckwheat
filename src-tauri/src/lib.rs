@@ -7,8 +7,9 @@ use commands::settings::{
     get_recording_directory, get_setting, get_settings_path, open_settings_folder,
 };
 use commands::slippi::{
-    capture_window_preview, check_game_window, get_default_slippi_path, get_game_process_name,
-    get_recordings, list_game_windows, open_file_location, set_game_process_name,
+    capture_window_preview, check_game_window, delete_recording, get_default_slippi_path,
+    get_game_process_name, get_last_replay_path, get_recordings, list_game_windows,
+    open_file_location, open_recording_folder, open_video, set_game_process_name,
     start_recording, start_watching, stop_recording, stop_watching,
 };
 use tauri::Manager;
@@ -42,6 +43,9 @@ pub fn run() {
             start_recording,
             stop_recording,
             get_recordings,
+            delete_recording,
+            open_video,
+            open_recording_folder,
             check_game_window,
             capture_window_preview,
             list_game_windows,
@@ -51,7 +55,8 @@ pub fn run() {
             open_settings_folder,
             get_setting,
             get_recording_directory,
-            open_file_location
+            open_file_location,
+            get_last_replay_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

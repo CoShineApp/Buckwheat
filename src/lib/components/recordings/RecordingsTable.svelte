@@ -36,30 +36,39 @@
 		}
 	}
 
-	function handlePlayVideo(videoPath: string | null) {
-		if (videoPath) {
+	async function handlePlayVideo(videoPath: string | null) {
+		if (!videoPath) return;
+		
+		try {
+			await invoke("open_video", { videoPath });
 			console.log("🎬 Playing video:", videoPath);
-			showSuccess("Video playback (placeholder)");
+		} catch (e) {
+			handleTauriError(e, "Failed to open video");
 		}
 	}
 
-	async function handleOpenFolder(path: string | null) {
-		if (!path) return;
+	async function handleOpenFolder(videoPath: string | null) {
+		if (!videoPath) return;
 		
 		try {
-			await invoke("open_file_location", { path });
-			showSuccess("Opened file location");
+			await invoke("open_recording_folder", { videoPath });
+			console.log("📂 Opened folder:", videoPath);
 		} catch (e) {
 			handleTauriError(e, "Failed to open folder");
 		}
 	}
 
-	async function handleDelete(id: string, videoPath: string | null) {
+	async function handleDelete(id: string, videoPath: string | null, slpPath: string) {
 		if (!confirm("Are you sure you want to delete this recording?")) return;
 		
-		console.log("🗑️ Deleting recording:", id, videoPath);
-		// TODO: Implement actual deletion
-		showSuccess("Recording deleted (placeholder)");
+		try {
+			await invoke("delete_recording", { videoPath, slpPath });
+			console.log("🗑️ Deleted recording:", id);
+			showSuccess("Recording deleted successfully");
+			await refreshRecordings();
+		} catch (e) {
+			handleTauriError(e, "Failed to delete recording");
+		}
 	}
 
 	function handleUpload(id: string) {
@@ -140,8 +149,8 @@
 											<div class="flex items-center gap-1">
 												{#each recording.slippi_metadata.players as player, idx}
 													<CharacterIcon
-														characterId={player.characterId}
-														colorIndex={player.characterColor}
+														characterId={player.character_id}
+														colorIndex={player.character_color}
 														size="sm"
 													/>
 													{#if idx === 0 && recording.slippi_metadata.players.length > 1}
@@ -149,13 +158,29 @@
 													{/if}
 												{/each}
 											</div>
-											<div class="flex flex-col">
-												<span class="text-sm font-medium">
-													{recording.slippi_metadata.players[0]?.playerTag || "Player 1"}
-													{#if recording.slippi_metadata.players[1]}
-														vs {recording.slippi_metadata.players[1].playerTag || "Player 2"}
+											<div class="flex flex-col gap-0.5">
+												{#if recording.slippi_metadata.players.length >= 2}
+													{@const winner = recording.slippi_metadata.players.find(p => p.port === recording.slippi_metadata?.winner_port)}
+													{@const loser = recording.slippi_metadata.players.find(p => p.port !== recording.slippi_metadata?.winner_port)}
+													
+													{#if winner}
+														<div class="flex items-center gap-1.5 text-sm">
+															<span class="font-semibold text-green-600 dark:text-green-400">{winner.player_tag}</span>
+															<span class="text-xs text-muted-foreground">defeated</span>
+															<span class="font-medium text-muted-foreground">{loser?.player_tag || "Unknown"}</span>
+														</div>
+													{:else}
+														<span class="text-sm font-medium">
+															{recording.slippi_metadata.players[0]?.player_tag || "Player 1"}
+															vs
+															{recording.slippi_metadata.players[1]?.player_tag || "Player 2"}
+														</span>
 													{/if}
-												</span>
+												{:else if recording.slippi_metadata.players[0]}
+													<span class="text-sm font-medium">
+														{recording.slippi_metadata.players[0].player_tag}
+													</span>
+												{/if}
 											</div>
 										</div>
 									{:else}
@@ -221,7 +246,7 @@
 										<Button
 											variant="ghost"
 											size="sm"
-											onclick={() => handleDelete(recording.id, recording.video_path)}
+											onclick={() => handleDelete(recording.id, recording.video_path, recording.slp_path)}
 											title="Delete"
 										>
 											<Trash2 class="size-4 text-destructive" />

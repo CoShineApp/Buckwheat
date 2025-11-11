@@ -30,35 +30,8 @@ export const CHARACTER_NAMES: Record<CharacterId, string> = {
 	[CharacterId.GANONDORF]: "Ganondorf",
 };
 
-// SSBWiki image URLs for character portraits
-export const CHARACTER_IMAGES: Record<CharacterId, string> = {
-	[CharacterId.CAPTAIN_FALCON]: "https://www.ssbwiki.com/images/7/79/Captain_Falcon_Palette_%28SSBM%29.png",
-	[CharacterId.DONKEY_KONG]: "https://www.ssbwiki.com/images/5/5c/Donkey_Kong_Palette_%28SSBM%29.png",
-	[CharacterId.FOX]: "https://www.ssbwiki.com/images/b/b6/Fox_Palette_%28SSBM%29.png",
-	[CharacterId.GAME_AND_WATCH]: "https://www.ssbwiki.com/images/4/46/Mr._Game_%26_Watch_Palette_%28SSBM%29.png",
-	[CharacterId.KIRBY]: "https://www.ssbwiki.com/images/0/00/Kirby_Palette_%28SSBM%29.png",
-	[CharacterId.BOWSER]: "https://www.ssbwiki.com/images/c/c5/Bowser_Palette_%28SSBM%29.png",
-	[CharacterId.LINK]: "https://www.ssbwiki.com/images/7/7d/Link_Palette_%28SSBM%29.png",
-	[CharacterId.LUIGI]: "https://www.ssbwiki.com/images/5/5f/Luigi_Palette_%28SSBM%29.png",
-	[CharacterId.MARIO]: "https://www.ssbwiki.com/images/d/d6/Mario_Palette_%28SSBM%29.png",
-	[CharacterId.MARTH]: "https://www.ssbwiki.com/images/b/b6/Marth_Palette_%28SSBM%29.png",
-	[CharacterId.MEWTWO]: "https://www.ssbwiki.com/images/0/0a/Mewtwo_Palette_%28SSBM%29.png",
-	[CharacterId.NESS]: "https://www.ssbwiki.com/images/6/67/Ness_Palette_%28SSBM%29.png",
-	[CharacterId.PEACH]: "https://www.ssbwiki.com/images/c/cd/Peach_Palette_%28SSBM%29.png",
-	[CharacterId.PIKACHU]: "https://www.ssbwiki.com/images/4/4d/Pikachu_Palette_%28SSBM%29.png",
-	[CharacterId.ICE_CLIMBERS]: "https://www.ssbwiki.com/images/9/9f/Ice_Climbers_Palette_%28SSBM%29.png",
-	[CharacterId.JIGGLYPUFF]: "https://www.ssbwiki.com/images/1/13/Jigglypuff_Palette_%28SSBM%29.png",
-	[CharacterId.SAMUS]: "https://www.ssbwiki.com/images/a/a9/Samus_Palette_%28SSBM%29.png",
-	[CharacterId.YOSHI]: "https://www.ssbwiki.com/images/7/79/Yoshi_Palette_%28SSBM%29.png",
-	[CharacterId.ZELDA]: "https://www.ssbwiki.com/images/d/d0/Zelda_Palette_%28SSBM%29.png",
-	[CharacterId.SHEIK]: "https://www.ssbwiki.com/images/2/2d/Sheik_Palette_%28SSBM%29.png",
-	[CharacterId.FALCO]: "https://www.ssbwiki.com/images/d/d4/Falco_Palette_%28SSBM%29.png",
-	[CharacterId.YOUNG_LINK]: "https://www.ssbwiki.com/images/6/6d/Young_Link_Palette_%28SSBM%29.png",
-	[CharacterId.DR_MARIO]: "https://www.ssbwiki.com/images/c/cc/Dr._Mario_Palette_%28SSBM%29.png",
-	[CharacterId.ROY]: "https://www.ssbwiki.com/images/9/95/Roy_Palette_%28SSBM%29.png",
-	[CharacterId.PICHU]: "https://www.ssbwiki.com/images/5/58/Pichu_Palette_%28SSBM%29.png",
-	[CharacterId.GANONDORF]: "https://www.ssbwiki.com/images/d/d7/Ganondorf_Palette_%28SSBM%29.png",
-};
+// Character images are now served from /static/characters/
+// No need for external URLs - all images are local!
 
 // Stage names for display
 export const STAGE_NAMES: Record<number, string> = {
@@ -75,9 +48,63 @@ export function getCharacterName(characterId: CharacterId | number): string {
 	return CHARACTER_NAMES[characterId as CharacterId] || `Unknown Character (${characterId})`;
 }
 
-// Get character image URL by ID
+// Get character slug for file paths
+export function getCharacterSlug(characterId: CharacterId | number): string {
+	const slugs: Record<CharacterId, string> = {
+		[CharacterId.CAPTAIN_FALCON]: "captain-falcon",
+		[CharacterId.DONKEY_KONG]: "donkey-kong",
+		[CharacterId.FOX]: "fox",
+		[CharacterId.GAME_AND_WATCH]: "game-and-watch",
+		[CharacterId.KIRBY]: "kirby",
+		[CharacterId.BOWSER]: "bowser",
+		[CharacterId.LINK]: "link",
+		[CharacterId.LUIGI]: "luigi",
+		[CharacterId.MARIO]: "mario",
+		[CharacterId.MARTH]: "marth",
+		[CharacterId.MEWTWO]: "mewtwo",
+		[CharacterId.NESS]: "ness",
+		[CharacterId.PEACH]: "peach",
+		[CharacterId.PIKACHU]: "pikachu",
+		[CharacterId.ICE_CLIMBERS]: "ice-climbers",
+		[CharacterId.JIGGLYPUFF]: "jigglypuff",
+		[CharacterId.SAMUS]: "samus",
+		[CharacterId.YOSHI]: "yoshi",
+		[CharacterId.ZELDA]: "zelda",
+		[CharacterId.SHEIK]: "sheik",
+		[CharacterId.FALCO]: "falco",
+		[CharacterId.YOUNG_LINK]: "young-link",
+		[CharacterId.DR_MARIO]: "dr-mario",
+		[CharacterId.ROY]: "roy",
+		[CharacterId.PICHU]: "pichu",
+		[CharacterId.GANONDORF]: "ganondorf",
+	};
+	return slugs[characterId as CharacterId] || "unknown";
+}
+
+// Get character image URL by ID (uses local static assets)
 export function getCharacterImage(characterId: CharacterId | number): string {
-	return CHARACTER_IMAGES[characterId as CharacterId] || "";
+	const slug = getCharacterSlug(characterId);
+	// Use local static asset
+	return `/characters/${slug}.png`;
+}
+
+// Get stage slug for file paths
+export function getStageSlug(stageId: StageId | number): string {
+	const slugs: Record<number, string> = {
+		[StageId.FOUNTAIN_OF_DREAMS]: "fountain-of-dreams",
+		[StageId.POKEMON_STADIUM]: "pokemon-stadium",
+		[StageId.YOSHIS_STORY]: "yoshis-story",
+		[StageId.DREAM_LAND]: "dream-land",
+		[StageId.BATTLEFIELD]: "battlefield",
+		[StageId.FINAL_DESTINATION]: "final-destination",
+	};
+	return slugs[stageId] || "unknown";
+}
+
+// Get stage image path
+export function getStageImage(stageId: StageId | number): string {
+	const slug = getStageSlug(stageId);
+	return `/stages/${slug}.jpg`;
 }
 
 // Get stage name by ID with fallback
@@ -119,4 +146,3 @@ export function formatRelativeTime(timestamp: string): string {
 	// Return formatted date for older items
 	return then.toLocaleDateString();
 }
-

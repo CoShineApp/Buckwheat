@@ -40,9 +40,9 @@ export enum StageId {
 
 // Player information from .slp file
 export interface SlippiPlayer {
-	characterId: CharacterId;
-	characterColor: number;
-	playerTag: string;
+	character_id: CharacterId;
+	character_color: number;
+	player_tag: string;
 	port: number;
 }
 
@@ -51,9 +51,12 @@ export interface SlippiMetadata {
 	characters: CharacterId[];
 	stage: StageId | number;
 	players: SlippiPlayer[];
-	gameDuration: number; // in frames
-	startTime: string;
-	isPAL: boolean;
+	game_duration: number; // in frames (lastFrame)
+	start_time: string;
+	is_pal: boolean;
+	winner_port: number | null;
+	played_on: string | null; // "dolphin", "console", "nintendont"
+	total_frames: number; // Total frames in recording
 }
 
 // Backend recording session (from Rust)
@@ -64,12 +67,12 @@ export interface RecordingSession {
 	slp_path: string;
 	video_path: string | null;
 	duration: number | null; // in seconds
+	file_size: number | null; // in bytes
+	slippi_metadata: SlippiMetadata | null;
 }
 
 // Frontend recording with parsed metadata
 export interface RecordingWithMetadata extends RecordingSession {
-	slippi_metadata?: SlippiMetadata;
-	file_size?: number; // in bytes
 	is_loading?: boolean;
 	is_selected?: boolean;
 }

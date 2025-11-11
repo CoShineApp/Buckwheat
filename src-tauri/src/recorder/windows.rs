@@ -28,13 +28,11 @@ use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 use windows_capture::capture::Context;
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
-use windows_capture::capture::{
-    CaptureControl, CaptureControlError, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
-};
+use windows_capture::capture::{CaptureControl, GraphicsCaptureApiHandler};
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 use windows_capture::encoder::{
-    AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoEncoderError,
-    VideoSettingsBuilder, VideoSettingsSubType,
+    AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder,
+    VideoSettingsSubType,
 };
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 use windows_capture::frame::Frame;
@@ -189,7 +187,7 @@ impl Recorder for WindowsRecorder {
             .unwrap_or_else(|| "recording.mp4".into());
 
         if let Some(shared) = self.shared_state.take() {
-            if let Some(mut encoder) = shared.take_encoder() {
+            if let Some(encoder) = shared.take_encoder() {
                 encoder.finish().map_err(|err| {
                     Error::RecordingFailed(format!("Failed to finalize recording: {err:?}"))
                 })?;

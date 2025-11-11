@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
 	theme: "system",
 	recordingPath: "",
 	recordingQuality: "high",
-	autoStartRecording: false,
+	autoStartRecording: true,
 	slippiPath: "",
 	watchForGames: true,
 	startRecordingHotkey: "F9",
@@ -36,7 +36,7 @@ class SettingsStore {
 	theme = $state<Settings["theme"]>("system");
 	recordingPath = $state("");
 	recordingQuality = $state<Settings["recordingQuality"]>("high");
-	autoStartRecording = $state(false);
+	autoStartRecording = $state(true);
 	slippiPath = $state("");
 	watchForGames = $state(true);
 	startRecordingHotkey = $state("F9");

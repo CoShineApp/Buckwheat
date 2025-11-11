@@ -11,13 +11,15 @@
 	import HotkeySelector from "$lib/components/hotkey/HotkeySelector.svelte";
 	import { Folder, Gamepad2, Keyboard, Palette, FolderOpen, Database, Monitor, RefreshCw } from "@lucide/svelte";
 	import { onMount } from "svelte";
-	import { listGameWindows, getGameProcessName, setGameProcessName, type GameWindow } from "$lib/commands.svelte";
+	import { listGameWindows, getGameProcessName, setGameProcessName, captureWindowPreview, type GameWindow } from "$lib/commands.svelte";
 	import { toast } from "svelte-sonner";
 
 	let settingsPath = $state<string>("");
 	let currentProcessName = $state<string | null>(null);
 	let detectedWindows = $state<GameWindow[]>([]);
 	let isDetecting = $state(false);
+	let previewImage = $state<string | null>(null);
+	let isCapturingPreview = $state(false);
 
 	onMount(async () => {
 		try {
@@ -62,9 +64,30 @@
 				description: `Now using: ${window.window_title}`
 			});
 			detectedWindows = []; // Clear the list
+			
+			// Automatically capture preview after selection
+			await capturePreview();
 		} catch (error) {
 			console.error("Failed to set game window:", error);
 			toast.error("Failed to save selection");
+		}
+	}
+
+	async function capturePreview(): Promise<void> {
+		isCapturingPreview = true;
+		try {
+			const data = await captureWindowPreview();
+			previewImage = data;
+			if (!data) {
+				toast.error("Failed to capture preview", {
+					description: "Make sure the window is visible."
+				});
+			}
+		} catch (error) {
+			console.error("Failed to capture preview:", error);
+			toast.error("Failed to capture preview");
+		} finally {
+			isCapturingPreview = false;
 		}
 	}
 
@@ -322,6 +345,45 @@
 							: "Will attempt to auto-detect Slippi Dolphin"}
 					</p>
 				</div>
+
+				{#if currentProcessName}
+					<Separator />
+					
+					<div class="space-y-2">
+						<div class="flex items-center justify-between">
+							<Label>Window Preview</Label>
+							<Button 
+								variant="ghost" 
+								size="sm" 
+								onclick={capturePreview}
+								disabled={isCapturingPreview}
+							>
+								<RefreshCw class={`size-4 mr-2 ${isCapturingPreview ? 'animate-spin' : ''}`} />
+								{isCapturingPreview ? "Capturing..." : "Refresh"}
+							</Button>
+						</div>
+						{#if previewImage}
+							<div class="flex items-center justify-center rounded-md border bg-muted p-2">
+								<img
+									src={`data:image/png;base64,${previewImage}`}
+									alt="Game window preview"
+									class="max-h-48 w-full rounded-md object-contain"
+								/>
+							</div>
+							<p class="text-xs text-muted-foreground">
+								Preview of the selected game window
+							</p>
+						{:else if isCapturingPreview}
+							<div class="flex items-center justify-center rounded-md border bg-muted p-8">
+								<p class="text-sm text-muted-foreground">Capturing preview...</p>
+							</div>
+						{:else}
+							<div class="flex items-center justify-center rounded-md border bg-muted p-8">
+								<p class="text-sm text-muted-foreground">Click refresh to capture preview</p>
+							</div>
+						{/if}
+					</div>
+				{/if}
 
 				<Separator />
 

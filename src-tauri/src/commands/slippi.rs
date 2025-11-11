@@ -4,9 +4,10 @@ use crate::game_detector::{slippi_paths, GameDetector};
 use crate::recorder;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use sysinfo::System;
-use tauri::State;
+use tauri::{Emitter, Listener, Manager, State};
+use walkdir::WalkDir;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
@@ -37,6 +38,27 @@ pub struct GameWindow {
     pub has_owner: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SlippiMetadata {
+    pub characters: Vec<u8>,
+    pub stage: u16,
+    pub players: Vec<PlayerInfo>,
+    pub game_duration: i32,
+    pub start_time: String,
+    pub is_pal: bool,
+    pub winner_port: Option<u8>,
+    pub played_on: Option<String>,
+    pub total_frames: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlayerInfo {
+    pub character_id: u8,
+    pub character_color: u8,
+    pub player_tag: String,
+    pub port: u8,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RecordingSession {
     pub id: String,
@@ -45,6 +67,8 @@ pub struct RecordingSession {
     pub slp_path: String,
     pub video_path: Option<String>,
     pub duration: Option<u64>,
+    pub file_size: Option<u64>,
+    pub slippi_metadata: Option<SlippiMetadata>,
 }
 
 /// Get the default Slippi replay folder path for the current OS
@@ -57,24 +81,38 @@ pub fn get_default_slippi_path() -> Result<String, Error> {
         .ok_or_else(|| Error::InvalidPath("Failed to convert path to string".to_string()))
 }
 
+/// Get the last detected replay file path
+#[tauri::command]
+pub fn get_last_replay_path(state: State<'_, AppState>) -> Option<String> {
+    state.last_replay_path.lock().ok().and_then(|path| path.clone())
+}
+
 /// Start watching for new Slippi games
 #[tauri::command]
-pub async fn start_watching(path: String, state: State<'_, AppState>) -> Result<(), Error> {
+pub async fn start_watching(path: String, app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), Error> {
     log::info!("📁 Starting to watch Slippi folder: {}", path);
 
     let slippi_path = PathBuf::from(&path);
 
     // Check if path exists
     if !slippi_path.exists() {
+        log::error!("❌ Path does not exist: {}", path);
         return Err(Error::InvalidPath(format!(
             "Slippi folder does not exist: {}",
             path
         )));
     }
 
-    // Create new GameDetector
+    log::info!("✅ Path exists: {}", path);
+    log::info!("📊 Path is directory: {}", slippi_path.is_dir());
+
+    // Create new GameDetector with app handle
     let mut detector = GameDetector::new(slippi_path);
+    detector.set_app_handle(app.clone());
+    
+    log::info!("🚀 Calling detector.start_watching()");
     detector.start_watching()?;
+    log::info!("✅ detector.start_watching() completed successfully");
 
     // Store in app state
     let mut game_detector = state
@@ -83,8 +121,256 @@ pub async fn start_watching(path: String, state: State<'_, AppState>) -> Result<
         .map_err(|e| Error::InitializationError(format!("Failed to lock game detector: {}", e)))?;
     *game_detector = Some(detector);
 
+    // Set up event listener for auto-recording start
+    let app_clone = app.clone();
+    log::info!("🎧 Setting up event listener for 'slp-file-created' events");
+    
+    let app_clone2 = app.clone();
+    app.listen("slp-file-created", move |event| {
+        let slp_path = event.payload();
+        log::info!("📥 ========================================");
+        log::info!("📥 Received slp-file-created event!");
+        log::info!("📥 Payload: {}", slp_path);
+        log::info!("📥 ========================================");
+        
+        let app_handle = app_clone.clone();
+        
+        // Get state from app handle
+        let state_ref = app_handle.state::<AppState>();
+        
+        // Store the last replay path
+        log::info!("💾 Attempting to store last replay path");
+        if let Ok(mut last_replay) = state_ref.last_replay_path.lock() {
+            *last_replay = Some(slp_path.to_string());
+            log::info!("✅ Last replay path stored: {}", slp_path);
+            
+            // Emit event to frontend to update UI
+            log::info!("📤 Emitting last-replay-updated event to frontend");
+            match app_handle.emit("last-replay-updated", slp_path) {
+                Ok(_) => log::info!("✅ Frontend event emitted successfully"),
+                Err(e) => log::error!("❌ Failed to emit last-replay-updated event: {:?}", e),
+            }
+        } else {
+            log::error!("❌ Failed to lock last_replay_path mutex");
+        }
+        
+        // Check if auto-start recording is enabled
+        if let Ok(settings) = state_ref.settings.lock() {
+            let auto_start = settings
+                .get("autoStartRecording")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            
+            if !auto_start {
+                log::info!("⏭️  Auto-start recording is disabled");
+                return;
+            }
+        }
+        
+        // Check if already recording
+        if let Ok(recorder_lock) = state_ref.recorder.lock() {
+            if recorder_lock.is_some() {
+                log::info!("⏭️  Already recording, skipping");
+                return;
+            }
+        }
+        
+        // Start recording and track the file
+        if let Ok(mut current_file) = state_ref.current_recording_file.lock() {
+            *current_file = Some(slp_path.to_string());
+            log::info!("📝 Tracking recording file for game end detection: {}", slp_path);
+        }
+        
+        let slp_path_for_recording = slp_path.to_string();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = trigger_auto_recording(app_handle, slp_path_for_recording).await {
+                log::error!("Failed to trigger auto-recording: {:?}", e);
+            }
+        });
+    });
+    
+    // Set up event listener for file modifications (game ending!)
+    log::info!("🎧 Setting up event listener for 'slp-file-modified' events");
+    let app_clone2_inner = app_clone2.clone();
+    app_clone2.listen("slp-file-modified", move |event| {
+        let modified_path = event.payload();
+        log::info!("📝 File modified - game likely ended: {}", modified_path);
+        
+        let state_ref = app_clone2_inner.state::<AppState>();
+        
+        // Check if this is the file we're currently recording
+        if let Ok(current_file) = state_ref.current_recording_file.lock() {
+            if let Some(recording_file) = current_file.as_ref() {
+                if recording_file == modified_path {
+                    log::info!("✅ Detected modification of recording file - game ended!");
+                    drop(current_file); // Drop the lock before spawning task
+                    
+                    // Slippi writes all data at once when game ends
+                    // Wait a few seconds to ensure write is complete, then stop recording
+                    let app_handle = app_clone2_inner.clone();
+                    tauri::async_runtime::spawn(async move {
+                        log::info!("⏰ Waiting 3 seconds for file write to complete...");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                        
+                        log::info!("🛑 Stopping recording after game end...");
+                        if let Err(e) = stop_recording_internal(&app_handle).await {
+                            log::error!("Failed to stop recording: {:?}", e);
+                        }
+                    });
+                }
+            }
+        };
+    });
+
     log::info!("✅ Now watching for .slp files");
     Ok(())
+}
+
+async fn stop_recording_internal(app: &tauri::AppHandle) -> Result<(), Error> {
+    let state = app.state::<AppState>();
+    
+    // Stop recording
+    let mut recorder_lock = state
+        .recorder
+        .lock()
+        .map_err(|e| Error::RecordingFailed(format!("Failed to lock recorder: {}", e)))?;
+    
+    if let Some(recorder) = recorder_lock.as_mut() {
+        let output_path = recorder.stop_recording()?;
+        log::info!("✅ Auto-stopped recording: {}", output_path);
+        
+        // Clear recording state
+        *recorder_lock = None;
+        drop(recorder_lock);
+        
+        if let Ok(mut current_file) = state.current_recording_file.lock() {
+            *current_file = None;
+        }
+        if let Ok(mut last_mod) = state.last_file_modification.lock() {
+            *last_mod = None;
+        }
+        
+        // Emit event to frontend
+        if let Err(e) = app.emit("recording-stopped", output_path) {
+            log::error!("Failed to emit recording-stopped event: {:?}", e);
+        }
+        
+        Ok(())
+    } else {
+        Err(Error::RecordingFailed("No active recording".to_string()))
+    }
+}
+
+async fn trigger_auto_recording(app: tauri::AppHandle, slp_path: String) -> Result<(), Error> {
+    log::info!("🎬 Triggering auto-recording for: {}", slp_path);
+    
+    let state = app.state::<AppState>();
+    
+    // Generate output path matching the .slp filename
+    let recording_dir = match get_recording_directory_internal(&app).await {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::error!("Failed to get recording directory: {:?}", e);
+            return Err(e);
+        }
+    };
+    
+    // Extract filename from .slp path and change extension to .mp4
+    let slp_filename = std::path::Path::new(&slp_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("recording");
+    
+    let output_path = format!("{}/{}.mp4", recording_dir, slp_filename);
+    log::info!("📹 Output path: {}", output_path);
+    
+    // Get or create recorder
+    let mut recorder_lock = state
+        .recorder
+        .lock()
+        .map_err(|e| Error::InitializationError(format!("Failed to lock recorder: {}", e)))?;
+    
+    // Create new recorder if none exists
+    if recorder_lock.is_none() {
+        *recorder_lock = Some(recorder::get_recorder());
+    }
+    
+    // Provide the selected target window (if any) to the Windows recorder via env
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(settings) = state.settings.lock() {
+            if let Some(val) = settings.get("game_process_name").and_then(|v| v.as_str()) {
+                let id_string = val.trim().to_string();
+                if !id_string.is_empty() {
+                    std::env::set_var("PEPPI_TARGET_WINDOW", &id_string);
+                    if let Some(pos) = id_string.find("(PID:") {
+                        let after = &id_string[pos + 5..];
+                        let digits: String = after.chars().filter(|c| c.is_ascii_digit()).collect();
+                        if !digits.is_empty() {
+                            std::env::set_var("PEPPI_TARGET_PID", digits);
+                        }
+                    }
+                    log::info!("Providing target window to recorder: {}", id_string);
+                }
+            }
+        }
+    }
+    
+    // Start recording
+    if let Some(recorder) = recorder_lock.as_mut() {
+        recorder.start_recording(&output_path)?;
+        log::info!("✅ Auto-recording started: {}", output_path);
+        
+        // Store the .slp path associated with this recording
+        if let Ok(mut current_file) = state.current_recording_file.lock() {
+            *current_file = Some(slp_path.clone());
+            log::info!("💾 Stored current recording .slp: {}", slp_path);
+        }
+        
+        // Emit event to frontend
+        if let Err(e) = app.emit("recording-started", output_path) {
+            log::error!("Failed to emit recording-started event: {:?}", e);
+        }
+        
+        Ok(())
+    } else {
+        Err(Error::InitializationError(
+            "Failed to initialize recorder".to_string(),
+        ))
+    }
+}
+
+async fn get_recording_directory_internal(app: &tauri::AppHandle) -> Result<String, Error> {
+    use tauri_plugin_store::StoreExt;
+    
+    let store = app.store("settings.json")
+        .map_err(|e| Error::InitializationError(format!("Failed to open settings store: {}", e)))?;
+    
+    if let Some(value) = store.get("recordingPath") {
+        if let Some(path) = value.as_str() {
+            if !path.is_empty() {
+                let path_string = path.to_string();
+                std::fs::create_dir_all(&path_string)
+                    .map_err(|e| Error::RecordingFailed(format!("Failed to create directory: {}", e)))?;
+                return Ok(path_string);
+            }
+        }
+    }
+    
+    // Use default: Videos/Buckwheat
+    let default_dir = app
+        .path()
+        .video_dir()
+        .map_err(|e| Error::InitializationError(format!("Failed to get videos directory: {}", e)))?
+        .join("Buckwheat");
+    
+    std::fs::create_dir_all(&default_dir)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to create default directory: {}", e)))?;
+    
+    default_dir
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| Error::InvalidPath("Failed to convert path to string".to_string()))
 }
 
 /// Stop watching for new games
@@ -180,29 +466,378 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<String, Error>
     }
 }
 
+/// Delete a recording (video and optionally .slp file)
+#[tauri::command]
+pub async fn delete_recording(
+    video_path: Option<String>,
+    _slp_path: String,
+) -> Result<(), Error> {
+    log::info!("🗑️  Deleting recording...");
+    
+    // Delete video file if it exists
+    if let Some(video) = video_path {
+        if !video.is_empty() && std::path::Path::new(&video).exists() {
+            std::fs::remove_file(&video)
+                .map_err(|e| Error::RecordingFailed(format!("Failed to delete video: {}", e)))?;
+            log::info!("✅ Deleted video: {}", video);
+        }
+    }
+    
+    // Delete .slp file if it exists and user wants to
+    // For now, we'll keep the .slp files since they're the source of truth
+    // Uncomment this if you want to delete .slp files too:
+    /*
+    if !slp_path.is_empty() && std::path::Path::new(&slp_path).exists() {
+        std::fs::remove_file(&slp_path)
+            .map_err(|e| Error::RecordingFailed(format!("Failed to delete .slp: {}", e)))?;
+        log::info!("✅ Deleted .slp: {}", slp_path);
+    }
+    */
+    
+    log::info!("✅ Recording deleted successfully");
+    Ok(())
+}
+
+/// Open a video file in the default player
+#[tauri::command]
+pub async fn open_video(video_path: String) -> Result<(), Error> {
+    log::info!("🎬 Opening video: {}", video_path);
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(&["/C", "start", "", &video_path])
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open video: {}", e)))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&video_path)
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open video: {}", e)))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&video_path)
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open video: {}", e)))?;
+    }
+    
+    Ok(())
+}
+
+/// Open the folder containing a video file
+#[tauri::command]
+pub async fn open_recording_folder(video_path: String) -> Result<(), Error> {
+    log::info!("📂 Opening folder for: {}", video_path);
+    
+    let path = std::path::Path::new(&video_path);
+    let folder = path.parent()
+        .ok_or_else(|| Error::InvalidPath("Failed to get parent directory".to_string()))?;
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open folder: {}", e)))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open folder: {}", e)))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to open folder: {}", e)))?;
+    }
+    
+    Ok(())
+}
+
 /// Get list of recorded sessions
 #[tauri::command]
-pub fn get_recordings() -> Result<Vec<RecordingSession>, Error> {
-    let mock_recordings = vec![
-        RecordingSession {
-            id: "1".to_string(),
-            start_time: "2025-11-06T12:00:00Z".to_string(),
-            end_time: Some("2025-11-06T12:05:00Z".to_string()),
-            slp_path: "/path/to/game1.slp".to_string(),
-            video_path: Some("/path/to/game1.mp4".to_string()),
-            duration: Some(300),
-        },
-        RecordingSession {
-            id: "2".to_string(),
-            start_time: "2025-11-06T13:00:00Z".to_string(),
-            end_time: Some("2025-11-06T13:03:30Z".to_string()),
-            slp_path: "/path/to/game2.slp".to_string(),
-            video_path: Some("/path/to/game2.mp4".to_string()),
-            duration: Some(210),
-        },
-    ];
+pub async fn get_recordings(app: tauri::AppHandle) -> Result<Vec<RecordingSession>, Error> {
+    log::info!("📂 Scanning for recordings...");
+    
+    // Get recording directory
+    let recording_dir = match get_recording_directory_internal(&app).await {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::error!("Failed to get recording directory: {:?}", e);
+            return Ok(Vec::new()); // Return empty list instead of error
+        }
+    };
+    
+    log::info!("📁 Recording directory: {}", recording_dir);
+    
+    // Get Slippi directory
+    let slippi_dir = {
+        use tauri_plugin_store::StoreExt;
+        let store = app.store("settings.json")
+            .map_err(|e| Error::InitializationError(format!("Failed to open settings store: {}", e)))?;
+        
+        if let Some(value) = store.get("slippiPath") {
+            if let Some(path) = value.as_str() {
+                if !path.is_empty() {
+                    Some(path.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+    
+    let slippi_dir = match slippi_dir {
+        Some(path) => path,
+        None => slippi_paths::get_default_slippi_path()
+            .to_str()
+            .unwrap_or("")
+            .to_string(),
+    };
+    
+    log::info!("📁 Slippi directory: {}", slippi_dir);
+    
+    // Scan for MP4 files in recording directory
+    let mut recordings = Vec::new();
+    
+    for entry in WalkDir::new(&recording_dir)
+        .max_depth(3)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("mp4") {
+            log::info!("🎥 Found video: {:?}", path);
+            
+            if let Ok(session) = create_recording_session(path, &slippi_dir).await {
+                recordings.push(session);
+            }
+        }
+    }
+    
+    // Sort by start time (newest first)
+    recordings.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+    
+    log::info!("✅ Found {} recordings", recordings.len());
+    Ok(recordings)
+}
 
-    Ok(mock_recordings)
+async fn create_recording_session(
+    video_path: &Path,
+    slippi_dir: &str,
+) -> Result<RecordingSession, Error> {
+    let video_path_str = video_path.to_string_lossy().to_string();
+    
+    // Get file metadata
+    let metadata = std::fs::metadata(video_path)
+        .map_err(|e| Error::InvalidPath(format!("Failed to read file metadata: {}", e)))?;
+    
+    let file_size = metadata.len();
+    let start_time = metadata.created()
+        .or_else(|_| metadata.modified())
+        .ok()
+        .and_then(|t| {
+            use std::time::SystemTime;
+            t.duration_since(SystemTime::UNIX_EPOCH).ok()
+        })
+        .map(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
+                .unwrap_or_default()
+                .to_rfc3339()
+        })
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+    
+    // Try to find matching .slp file
+    // Look for files with similar timestamp
+    let video_filename = video_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let slp_path = find_matching_slp(video_filename, slippi_dir).await;
+    
+    // Parse .slp file if found
+    let (slippi_metadata, duration, end_time) = if let Some(ref slp) = slp_path {
+        parse_slp_file(slp).await
+    } else {
+        (None, None, None)
+    };
+    
+    // Generate ID from filename
+    let id = video_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+    
+    Ok(RecordingSession {
+        id,
+        start_time,
+        end_time,
+        slp_path: slp_path.unwrap_or_default(),
+        video_path: Some(video_path_str),
+        duration,
+        file_size: Some(file_size),
+        slippi_metadata,
+    })
+}
+
+async fn find_matching_slp(video_filename: &str, slippi_dir: &str) -> Option<String> {
+    // Video files now have format: Game_20251110T200349.mp4
+    // .slp files have format: Game_20251110T200349.slp
+    // They should match exactly!
+    
+    log::debug!("🔍 Looking for .slp file matching: {}", video_filename);
+    
+    // Build expected .slp path
+    let slp_filename = format!("{}.slp", video_filename);
+    
+    // Search for exact match first
+    for entry in WalkDir::new(slippi_dir)
+        .max_depth(3)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+            if filename == slp_filename {
+                log::debug!("✅ Found exact match: {:?}", path);
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    
+    log::warn!("⚠️ No matching .slp file found for: {}", video_filename);
+    None
+}
+
+async fn parse_slp_file(slp_path: &str) -> (Option<SlippiMetadata>, Option<u64>, Option<String>) {
+    use std::fs::File;
+    use std::io::BufReader;
+    use peppi::io::slippi::read;
+    
+    log::info!("📊 Parsing .slp file: {}", slp_path);
+    
+    let file = match File::open(slp_path) {
+        Ok(f) => f,
+        Err(e) => {
+            log::error!("Failed to open .slp file: {:?}", e);
+            return (None, None, None);
+        }
+    };
+    
+    let mut reader = BufReader::new(file);
+    
+    match read(&mut reader, None) {
+        Ok(game) => {
+            log::info!("✅ Successfully parsed .slp file");
+            
+            // SIMPLE: Just use peppi's data directly
+            let mut characters = Vec::new();
+            let mut players = Vec::new();
+            
+            // Get player codes from metadata JSON
+            let player_metadata = game.metadata.as_ref()
+                .and_then(|m| m.get("players"))
+                .and_then(|p| p.as_object());
+            
+            // Get winner from end game data
+            let winner_port = game.end.as_ref()
+                .and_then(|end| end.players.as_ref())
+                .and_then(|end_players| {
+                    end_players.iter()
+                        .find(|p| p.placement == 0)
+                        .map(|p| u8::from(p.port))
+                });
+            
+            log::info!("🏆 Winner port: {:?}", winner_port);
+            
+            // Iterate through players - peppi gives us the correct data
+            for player in &game.start.players {
+                let port = u8::from(player.port);
+                let char_id = player.character as u8;
+                
+                characters.push(char_id);
+                
+                // Get player tag from metadata
+                let player_tag = player_metadata
+                    .and_then(|m| m.get(&port.to_string()))
+                    .and_then(|p| p.get("names"))
+                    .and_then(|n| n.get("code").or_else(|| n.get("netplay")))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("P{}", port));
+                
+                log::info!("👤 Port {}: {} playing character ID {}", port, player_tag, char_id);
+                
+                players.push(PlayerInfo {
+                    character_id: char_id,
+                    character_color: player.costume,
+                    player_tag,
+                    port,
+                });
+            }
+            
+            let stage = game.start.stage as u16;
+            log::info!("🎭 Stage ID: {}", stage);
+            
+            // Get duration from metadata
+            let game_duration = game.metadata.as_ref()
+                .and_then(|m| m.get("lastFrame"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32;
+            
+            let duration_secs = (game_duration as f64 / 60.0) as u64;
+            log::info!("⏱️  Duration: {} frames = {} seconds", game_duration, duration_secs);
+            
+            // Get start time from metadata
+            let start_time = game.metadata.as_ref()
+                .and_then(|m| m.get("startAt"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+            
+            let is_pal = game.start.is_pal.unwrap_or(false);
+            
+            // Get additional metadata
+            let played_on = game.metadata.as_ref()
+                .and_then(|m| m.get("playedOn"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            
+            let total_frames = game.frames.len() as i32;
+            
+            let metadata = SlippiMetadata {
+                characters,
+                stage,
+                players,
+                game_duration,
+                start_time: start_time.clone(),
+                is_pal,
+                winner_port,
+                played_on,
+                total_frames,
+            };
+            
+            (Some(metadata), Some(duration_secs), Some(start_time))
+        }
+        Err(e) => {
+            log::error!("Failed to parse .slp file: {:?}", e);
+            (None, None, None)
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
