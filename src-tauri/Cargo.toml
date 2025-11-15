@@ -47,6 +47,8 @@ ssbm-data = "0.1"
 walkdir = "2"
 # Device ID generation only
 uuid = { version = "1.11", features = ["v4", "serde"] }
+# FFmpeg for clip extraction
+ffmpeg-sidecar = "2.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-capture = { version = "2.0.0-alpha.7", optional = true }

@@ -16,4 +16,3 @@ pub struct DeathEvent {
     pub port: u8,
     pub player_tag: String,
 }
-

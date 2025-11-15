@@ -66,6 +66,7 @@ export interface RecordingSession {
 	end_time: string | null;
 	slp_path: string;
 	video_path: string | null;
+	thumbnail_path: string | null;
 	duration: number | null; // in seconds
 	file_size: number | null; // in bytes
 	slippi_metadata: SlippiMetadata | null;

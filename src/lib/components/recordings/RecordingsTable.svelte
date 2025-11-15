@@ -142,8 +142,8 @@
 				</div>
 				<h3 class="mb-2 text-lg font-semibold">No recordings yet</h3>
 				<p class="mb-4 max-w-md text-sm text-muted-foreground">
-					Start your first recording to see your Melee matches here. All recordings will be
-					automatically paired with their replay files.
+					Start your first recording to see your Melee matches here. Recordings with matching
+					replays will automatically display detailed stats.
 				</p>
 			</div>
 		{:else}

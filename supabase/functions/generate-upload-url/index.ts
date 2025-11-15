@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
 
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 }) // 15 min
 
-    // Create database record
+    // Create database record with UPLOADING status
     const { data: upload, error: insertError } = await supabase
       .from('uploads')
       .insert({
@@ -104,6 +104,7 @@ Deno.serve(async (req) => {
         filename: fileName,
         b2_file_name: key,
         file_size: fileSize,
+        status: 'UPLOADING',
       })
       .select()
       .single()

@@ -1,4 +1,5 @@
 mod app_state;
+mod clip_processor;
 mod commands;
 mod game_detector;
 mod recorder;
@@ -9,10 +10,12 @@ use commands::settings::{
     get_recording_directory, get_setting, get_settings_path, open_settings_folder,
 };
 use commands::slippi::{
-    capture_window_preview, check_game_window, delete_recording, get_default_slippi_path,
-    get_game_process_name, get_last_replay_path, get_recordings, list_game_windows,
-    open_file_location, open_recording_folder, open_video, parse_slp_events,
-    set_game_process_name, start_recording, start_watching, stop_recording, stop_watching,
+    capture_window_preview, check_game_window, compress_video_for_upload, delete_recording,
+    delete_temp_file, get_clips, get_default_slippi_path, get_game_process_name,
+    get_last_replay_path, get_recordings, list_game_windows, mark_clip_timestamp,
+    open_file_location, open_recording_folder, open_video, parse_slp_events, process_clip_markers,
+    set_game_process_name, start_generic_recording, start_recording, start_watching,
+    stop_recording, stop_watching,
 };
 use tauri::Manager;
 
@@ -31,6 +34,8 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
+                        // Filter out verbose peppi library logs
+                        .filter(|metadata| !metadata.target().starts_with("peppi::"))
                         .build(),
                 )?;
             }
@@ -43,6 +48,7 @@ pub fn run() {
             start_watching,
             stop_watching,
             start_recording,
+            start_generic_recording,
             stop_recording,
             get_recordings,
             delete_recording,
@@ -60,8 +66,14 @@ pub fn run() {
             open_file_location,
             get_last_replay_path,
             parse_slp_events,
-            // Cloud storage command (device ID only)
-            get_device_id
+            // Clip commands
+            mark_clip_timestamp,
+            process_clip_markers,
+            get_clips,
+            // Cloud commands
+            compress_video_for_upload,
+            delete_temp_file,
+            get_device_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

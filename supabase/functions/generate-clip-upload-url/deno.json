@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.48.1",
+    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.654.0",
+    "@aws-sdk/s3-request-presigner": "npm:@aws-sdk/s3-request-presigner@^3.654.0"
+  }
+}
+

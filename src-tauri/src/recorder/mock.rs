@@ -18,13 +18,21 @@ impl MockRecorder {
 }
 
 impl Recorder for MockRecorder {
-    fn start_recording(&mut self, output_path: &str, quality: super::RecordingQuality) -> Result<(), Error> {
+    fn start_recording(
+        &mut self,
+        output_path: &str,
+        quality: super::RecordingQuality,
+    ) -> Result<(), Error> {
         if self.is_recording {
             return Err(Error::RecordingFailed("Already recording".to_string()));
         }
 
-        println!("🎥 [MOCK] Starting recording to: {} with {:?} quality (bitrate: {} Mbps)", 
-                 output_path, quality, quality.bitrate() / 1_000_000);
+        println!(
+            "🎥 [MOCK] Starting recording to: {} with {:?} quality (bitrate: {} Mbps)",
+            output_path,
+            quality,
+            quality.bitrate() / 1_000_000
+        );
         self.is_recording = true;
         self.start_time = Some(Instant::now());
         self.output_path = Some(output_path.to_string());

@@ -12,6 +12,7 @@ export interface Upload {
 	duration_seconds: number | null;
 	uploaded_at: string;
 	metadata: any | null;
+	status: 'UPLOADING' | 'UPLOADED' | 'FAILED';
 }
 
 export interface Clip {
@@ -31,9 +32,12 @@ export interface Clip {
 export interface UploadQueueItem {
 	id: string;
 	videoPath: string;
-	status: 'pending' | 'uploading' | 'completed' | 'error';
+	status: 'pending' | 'uploading' | 'completed' | 'error' | 'cancelled';
 	progress: number;
 	error?: string;
+	uploadId?: string;
+	abortController?: AbortController;
+	xhr?: XMLHttpRequest;
 }
 
 class CloudStorageStore {
@@ -53,11 +57,13 @@ class CloudStorageStore {
 			this.loading = true;
 			this.error = null;
 
+			// Only fetch UPLOADED videos
 			const { data, error } = await auth.supabase
 				.from('uploads')
 				.select('*')
 				.eq('user_id', auth.user.id)
-				.order('uploaded_at', { ascending: false });
+				.eq('status', 'UPLOADED')
+				.order('uploaded_at', { ascending: false});
 
 			if (error) throw error;
 
@@ -87,70 +93,103 @@ class CloudStorageStore {
 			status: 'pending',
 			progress: 0,
 		};
-		this.uploadQueue.push(queueItem);
+		this.uploadQueue = [...this.uploadQueue, queueItem]; // Trigger reactivity
+
+		let compressedPath: string | null = null;
 
 		try {
 			queueItem.status = 'uploading';
-			console.log('📤 Starting upload for:', videoPath);
+			this.uploadQueue = [...this.uploadQueue]; // Trigger reactivity
 
-			// Read file
-			console.log('📖 Reading file...');
-			const fileBuffer = await readFile(videoPath);
-			const fileName = videoPath.split(/[\\/]/).pop()!;
-			const fileSize = fileBuffer.length;
-			console.log(`📊 File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
+			// Step 1: Compress video (0-30%)
+			queueItem.progress = 2;
+			this.uploadQueue = [...this.uploadQueue];
 
-			queueItem.progress = 5;
-
-			// Call Edge Function to get signed upload URL
-			console.log('🔐 Getting signed URL from Edge Function...');
-			const { data: signedData, error: signedError } = await auth.supabase.functions.invoke('generate-upload-url', {
-				body: { fileName, fileSize, metadata }
-			});
-
-			if (signedError) {
-				console.error('❌ Edge Function error:', signedError);
-				throw signedError;
+			try {
+				compressedPath = await invoke<string>('compress_video_for_upload', {
+					inputPath: videoPath
+				});
+				queueItem.progress = 30;
+				this.uploadQueue = [...this.uploadQueue];
+			} catch (err) {
+				console.warn('Video compression failed, uploading original:', err);
+				compressedPath = videoPath; // Fallback to original
+				queueItem.progress = 30;
+				this.uploadQueue = [...this.uploadQueue];
 			}
 
-			console.log('✅ Got signed URL:', signedData.uploadUrl.substring(0, 100) + '...');
-			queueItem.progress = 10;
+			// Step 2: Read compressed file
+			const fileBuffer = await readFile(compressedPath);
+			const originalFileName = videoPath.split(/[\\/]/).pop()!;
+			const fileName = originalFileName;
+			const fileSize = fileBuffer.length;
 
-			// Upload directly to B2 using XMLHttpRequest for progress tracking
-			console.log('⬆️  Starting B2 upload with progress tracking...');
+			queueItem.progress = 35;
+			this.uploadQueue = [...this.uploadQueue];
+
+			// Step 3: Get signed upload URL (35-40%)
+			let signedData;
+			let signedError;
+			try {
+				const response = await auth.supabase.functions.invoke('generate-upload-url', {
+					body: { fileName, fileSize, metadata }
+				});
+				signedData = response.data;
+				signedError = response.error;
+			} catch (err) {
+				throw new Error('Failed to get upload URL: ' + (err instanceof Error ? err.message : 'timeout or network error'));
+			}
+
+			if (signedError) {
+				throw new Error('Edge function error: ' + signedError.message);
+			}
+
+			if (!signedData?.uploadUrl || !signedData?.upload?.id) {
+				throw new Error('No upload URL received from server');
+			}
+
+			queueItem.uploadId = signedData.upload.id;
+			queueItem.progress = 40;
+			this.uploadQueue = [...this.uploadQueue];
+
+			// Step 4: Upload to B2 (40-95%)
 			await new Promise<void>((resolve, reject) => {
 				const xhr = new XMLHttpRequest();
+				queueItem.xhr = xhr; // Store for cancellation
+				
+				// Set timeout for upload (20 minutes for large files)
+				xhr.timeout = 1200000;
 
 				// Track upload progress
 				xhr.upload.addEventListener('progress', (e) => {
 					if (e.lengthComputable) {
 						const percentComplete = (e.loaded / e.total) * 100;
-						// Map 10% to 90% for upload progress
-						queueItem.progress = 10 + (percentComplete * 0.8);
-						console.log(`📊 Upload progress: ${percentComplete.toFixed(1)}% (${e.loaded}/${e.total} bytes)`);
+						// Map 40% to 95% for upload progress
+						queueItem.progress = 40 + (percentComplete * 0.55);
+						this.uploadQueue = [...this.uploadQueue]; // Trigger reactivity
 					}
 				});
 
 				xhr.addEventListener('load', () => {
 					if (xhr.status >= 200 && xhr.status < 300) {
-						console.log('✅ Upload completed successfully!', xhr.status);
-						queueItem.progress = 90;
+						queueItem.progress = 95;
+						this.uploadQueue = [...this.uploadQueue];
 						resolve();
 					} else {
-						console.error('❌ Upload failed with status:', xhr.status, xhr.statusText);
-						console.error('Response:', xhr.responseText);
 						reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
 					}
 				});
 
 				xhr.addEventListener('error', () => {
-					console.error('❌ Network error during upload');
 					reject(new Error('Network error during upload'));
 				});
 
+				xhr.addEventListener('timeout', () => {
+					reject(new Error('Upload timed out after 20 minutes'));
+				});
+
 				xhr.addEventListener('abort', () => {
-					console.error('❌ Upload aborted');
-					reject(new Error('Upload aborted'));
+					reject(new Error('Upload cancelled by user'));
 				});
 
 				xhr.open('PUT', signedData.uploadUrl);
@@ -158,25 +197,61 @@ class CloudStorageStore {
 				xhr.send(fileBuffer);
 			});
 
-			console.log('💾 Updating database and profile...');
+			// Step 5: Mark upload as complete (95-100%)
+			queueItem.progress = 97;
+			this.uploadQueue = [...this.uploadQueue];
+
+			await auth.supabase.functions.invoke('complete-upload', {
+				body: { uploadId: queueItem.uploadId, status: 'UPLOADED' }
+			});
 
 			// Update storage usage in profile
 			await auth.loadProfile();
-
+			
 			queueItem.status = 'completed';
 			queueItem.progress = 100;
-
-			console.log('🎉 Upload fully completed!');
+			this.uploadQueue = [...this.uploadQueue];
 
 			// Refresh uploads list
 			await this.refreshUploads();
 
 			return signedData.upload;
 		} catch (err) {
-			console.error('❌ Error uploading video:', err);
-			queueItem.status = 'error';
+			// Mark upload as FAILED in database if we have an uploadId
+			if (queueItem.uploadId && err instanceof Error && !err.message.includes('cancelled')) {
+				try {
+					await auth.supabase.functions.invoke('complete-upload', {
+						body: { uploadId: queueItem.uploadId, status: 'FAILED' }
+					});
+				} catch (completeErr) {
+					console.error('Failed to mark upload as FAILED:', completeErr);
+				}
+			}
+
+			queueItem.status = queueItem.xhr?.readyState === XMLHttpRequest.DONE && queueItem.status === 'uploading' ? 'cancelled' : 'error';
 			queueItem.error = err instanceof Error ? err.message : 'Upload failed';
+			this.uploadQueue = [...this.uploadQueue];
+			console.error('Upload error:', err);
 			throw err;
+		} finally {
+			// Cleanup compressed file if it was created
+			if (compressedPath && compressedPath !== videoPath) {
+				try {
+					await invoke('delete_temp_file', { path: compressedPath });
+				} catch (err) {
+					console.warn('Failed to delete temp compressed file:', err);
+				}
+			}
+		}
+	}
+
+	cancelUpload(id: string) {
+		const queueItem = this.uploadQueue.find(item => item.id === id);
+		if (queueItem && queueItem.xhr) {
+			queueItem.xhr.abort();
+			queueItem.status = 'cancelled';
+			queueItem.error = 'Upload cancelled by user';
+			this.uploadQueue = [...this.uploadQueue]; // Trigger reactivity
 		}
 	}
 
@@ -264,26 +339,57 @@ class CloudStorageStore {
 
 	async createPublicClip(videoPath: string, deviceId: string, metadata?: any) {
 		try {
-			// Read file and convert to base64
+			// Read file to get size
 			const fileBuffer = await readFile(videoPath);
 			const fileName = videoPath.split(/[\\/]/).pop()!;
-			
-			// Convert to base64 for transfer
-			const base64 = btoa(String.fromCharCode(...fileBuffer));
+			const fileSize = fileBuffer.length;
 
-			// Call Edge Function
-			const { data, error } = await auth.supabase.functions.invoke('create-public-clip', {
+			// Step 1: Get signed upload URL and create clip record
+			const { data: signedData, error: urlError } = await auth.supabase.functions.invoke('generate-clip-upload-url', {
 				body: {
 					fileName,
-					fileData: base64,
+					fileSize,
 					deviceId,
 					metadata: metadata || null
 				}
 			});
 
-			if (error) throw error;
+			if (urlError) throw urlError;
 
-			return data.clip;
+			if (!signedData?.uploadUrl || !signedData?.clip) {
+				throw new Error('No upload URL received from server');
+			}
+
+			// Step 2: Upload directly to B2 using signed URL
+			await new Promise<void>((resolve, reject) => {
+				const xhr = new XMLHttpRequest();
+				
+				// Set timeout for upload (20 minutes for large files)
+				xhr.timeout = 1200000;
+
+				xhr.addEventListener('load', () => {
+					if (xhr.status >= 200 && xhr.status < 300) {
+						resolve();
+					} else {
+						reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+					}
+				});
+
+				xhr.addEventListener('error', () => {
+					reject(new Error('Network error during upload'));
+				});
+
+				xhr.addEventListener('timeout', () => {
+					reject(new Error('Upload timed out after 20 minutes'));
+				});
+
+				xhr.open('PUT', signedData.uploadUrl);
+				xhr.setRequestHeader('Content-Type', 'video/mp4');
+				xhr.send(fileBuffer);
+			});
+
+			// Step 3: Return clip data (database record already created)
+			return signedData.clip;
 		} catch (err) {
 			console.error('Error creating public clip:', err);
 			throw err;
@@ -308,12 +414,17 @@ class CloudStorageStore {
 	}
 
 	removeFromQueue(id: string) {
+		const queueItem = this.uploadQueue.find(item => item.id === id);
+		// Cancel if still uploading
+		if (queueItem && queueItem.status === 'uploading') {
+			this.cancelUpload(id);
+		}
 		this.uploadQueue = this.uploadQueue.filter(item => item.id !== id);
 	}
 
 	clearCompletedQueue() {
 		this.uploadQueue = this.uploadQueue.filter(
-			item => item.status !== 'completed' && item.status !== 'error'
+			item => item.status !== 'completed' && item.status !== 'error' && item.status !== 'cancelled'
 		);
 	}
 	

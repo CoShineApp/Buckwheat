@@ -13,9 +13,9 @@ export type Settings = {
 	slippiPath: string;
 	watchForGames: boolean;
 	
-	// Hotkeys
-	startRecordingHotkey: string;
-	stopRecordingHotkey: string;
+	// Clips
+	createClipHotkey: string;
+	clipDuration: number;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -25,8 +25,8 @@ const DEFAULT_SETTINGS: Settings = {
 	autoStartRecording: true,
 	slippiPath: "",
 	watchForGames: true,
-	startRecordingHotkey: "F9",
-	stopRecordingHotkey: "F10",
+	createClipHotkey: "F9",
+	clipDuration: 30,
 };
 
 class SettingsStore {
@@ -39,8 +39,8 @@ class SettingsStore {
 	autoStartRecording = $state(true);
 	slippiPath = $state("");
 	watchForGames = $state(true);
-	startRecordingHotkey = $state("F9");
-	stopRecordingHotkey = $state("F10");
+	createClipHotkey = $state("F9");
+	clipDuration = $state(30);
 	
 	isLoading = $state(true);
 
@@ -71,8 +71,8 @@ class SettingsStore {
 		this.autoStartRecording = settings.autoStartRecording;
 		this.slippiPath = settings.slippiPath;
 		this.watchForGames = settings.watchForGames;
-		this.startRecordingHotkey = settings.startRecordingHotkey;
-		this.stopRecordingHotkey = settings.stopRecordingHotkey;
+		this.createClipHotkey = settings.createClipHotkey;
+		this.clipDuration = settings.clipDuration;
 	}
 
 	private loadDefaults(): void {
@@ -82,8 +82,8 @@ class SettingsStore {
 		this.autoStartRecording = DEFAULT_SETTINGS.autoStartRecording;
 		this.slippiPath = DEFAULT_SETTINGS.slippiPath;
 		this.watchForGames = DEFAULT_SETTINGS.watchForGames;
-		this.startRecordingHotkey = DEFAULT_SETTINGS.startRecordingHotkey;
-		this.stopRecordingHotkey = DEFAULT_SETTINGS.stopRecordingHotkey;
+		this.createClipHotkey = DEFAULT_SETTINGS.createClipHotkey;
+		this.clipDuration = DEFAULT_SETTINGS.clipDuration;
 	}
 
 	private async getAll(): Promise<Settings> {
@@ -96,8 +96,8 @@ class SettingsStore {
 			autoStartRecording: ((await this.store.get("autoStartRecording")) as boolean) ?? DEFAULT_SETTINGS.autoStartRecording,
 			slippiPath: ((await this.store.get("slippiPath")) as string) ?? DEFAULT_SETTINGS.slippiPath,
 			watchForGames: ((await this.store.get("watchForGames")) as boolean) ?? DEFAULT_SETTINGS.watchForGames,
-			startRecordingHotkey: ((await this.store.get("startRecordingHotkey")) as string) ?? DEFAULT_SETTINGS.startRecordingHotkey,
-			stopRecordingHotkey: ((await this.store.get("stopRecordingHotkey")) as string) ?? DEFAULT_SETTINGS.stopRecordingHotkey,
+			createClipHotkey: ((await this.store.get("createClipHotkey")) as string) ?? DEFAULT_SETTINGS.createClipHotkey,
+			clipDuration: ((await this.store.get("clipDuration")) as number) ?? DEFAULT_SETTINGS.clipDuration,
 		};
 	}
 
@@ -122,11 +122,11 @@ class SettingsStore {
 			case "watchForGames":
 				this.watchForGames = value as boolean;
 				break;
-			case "startRecordingHotkey":
-				this.startRecordingHotkey = value as string;
+			case "createClipHotkey":
+				this.createClipHotkey = value as string;
 				break;
-			case "stopRecordingHotkey":
-				this.stopRecordingHotkey = value as string;
+			case "clipDuration":
+				this.clipDuration = value as number;
 				break;
 		}
 		
@@ -147,8 +147,8 @@ class SettingsStore {
 			"autoStartRecording",
 			"slippiPath",
 			"watchForGames",
-			"startRecordingHotkey",
-			"stopRecordingHotkey",
+			"createClipHotkey",
+			"clipDuration",
 		];
 
 		for (const key of keys) {

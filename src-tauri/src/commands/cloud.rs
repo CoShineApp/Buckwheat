@@ -14,7 +14,7 @@ pub async fn get_device_id(app: AppHandle) -> Result<String, String> {
     if let Some(value) = store.get("device_id") {
         if let Some(device_id) = value.as_str() {
             return Ok(device_id.to_string());
-       }
+        }
     }
 
     // Generate new device_id

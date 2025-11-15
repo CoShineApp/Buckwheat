@@ -444,34 +444,45 @@
 			</CardContent>
 		</Card>
 
-		<!-- Hotkeys Settings -->
+		<!-- Clips Settings -->
 		<Card>
 			<CardHeader>
 				<div class="flex items-center gap-2">
 					<Keyboard class="size-5" />
-					<CardTitle>Hotkeys</CardTitle>
+					<CardTitle>Clips</CardTitle>
 				</div>
-				<CardDescription>Configure keyboard shortcuts</CardDescription>
+				<CardDescription>Configure clip creation settings</CardDescription>
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<div class="space-y-2">
-					<Label for="start-hotkey">Start Recording</Label>
+					<Label for="clip-hotkey">Create Clip Hotkey</Label>
 					<HotkeySelector
-						bind:value={settings.startRecordingHotkey}
+						bind:value={settings.createClipHotkey}
 						placeholder="Press a key combination..."
-						onchange={(value) => settings.set("startRecordingHotkey", value)}
+						onchange={(value) => settings.set("createClipHotkey", value)}
 					/>
-					<p class="text-xs text-muted-foreground">Click and press a key combination to set hotkey</p>
+					<p class="text-xs text-muted-foreground">
+						Press this hotkey during a recording to mark a clip
+					</p>
 				</div>
 
 				<div class="space-y-2">
-					<Label for="stop-hotkey">Stop Recording</Label>
-					<HotkeySelector
-						bind:value={settings.stopRecordingHotkey}
-						placeholder="Press a key combination..."
-						onchange={(value) => settings.set("stopRecordingHotkey", value)}
+					<Label for="clip-duration">
+						Clip Duration: {settings.clipDuration} seconds
+					</Label>
+					<input
+						type="range"
+						id="clip-duration"
+						min="5"
+						max="60"
+						step="5"
+						bind:value={settings.clipDuration}
+						onchange={() => settings.set("clipDuration", settings.clipDuration)}
+						class="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
 					/>
-					<p class="text-xs text-muted-foreground">Click and press a key combination to set hotkey</p>
+					<p class="text-xs text-muted-foreground">
+						Capture the last {settings.clipDuration} seconds when creating a clip (5-60 seconds)
+					</p>
 				</div>
 			</CardContent>
 		</Card>

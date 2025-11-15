@@ -27,17 +27,17 @@ impl GameDetector {
     pub fn start_watching(&mut self) -> Result<(), Error> {
         let app_handle = self.app_handle.clone();
         let watch_path = self.slippi_path.clone();
-        
+
         log::info!("🔧 Setting up file watcher for path: {:?}", watch_path);
         log::info!("🔧 Path exists: {}", watch_path.exists());
         log::info!("🔧 Path is directory: {}", watch_path.is_dir());
-        
+
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             match res {
                 Ok(event) => {
                     log::debug!("📂 File system event received: {:?}", event.kind);
                     log::debug!("📂 Event paths: {:?}", event.paths);
-                    
+
                     // Log all events for debugging
                     match event.kind {
                         EventKind::Create(_) => log::info!("✅ CREATE event detected"),
@@ -46,26 +46,32 @@ impl GameDetector {
                         EventKind::Access(_) => log::debug!("👁️  ACCESS event detected"),
                         _ => log::debug!("❓ OTHER event: {:?}", event.kind),
                     }
-                    
+
                     // Handle CREATE events (new game starting)
                     if let EventKind::Create(_) = event.kind {
                         for path in &event.paths {
                             log::info!("🔍 Examining created file: {:?}", path);
-                            
+
                             if let Some(ext) = path.extension() {
                                 log::info!("📎 File extension: {:?}", ext);
-                                
+
                                 if ext == "slp" {
                                     log::info!("🎮 New Slippi replay detected: {:?}", path);
-                                    
+
                                     // Emit event to trigger auto-recording
                                     if let Some(handle) = &app_handle {
                                         let path_string = path.to_string_lossy().to_string();
-                                        log::info!("📤 Emitting slp-file-created event with path: {}", path_string);
-                                        
+                                        log::info!(
+                                            "📤 Emitting slp-file-created event with path: {}",
+                                            path_string
+                                        );
+
                                         match handle.emit("slp-file-created", path_string.clone()) {
                                             Ok(_) => log::info!("✅ Event emitted successfully"),
-                                            Err(e) => log::error!("❌ Failed to emit slp-file-created event: {:?}", e),
+                                            Err(e) => log::error!(
+                                                "❌ Failed to emit slp-file-created event: {:?}",
+                                                e
+                                            ),
                                         }
                                     } else {
                                         log::error!("❌ App handle is None, cannot emit event");
@@ -78,7 +84,7 @@ impl GameDetector {
                             }
                         }
                     }
-                    
+
                     // Handle MODIFY events (game in progress)
                     if let EventKind::Modify(_) = event.kind {
                         for path in &event.paths {
@@ -88,9 +94,14 @@ impl GameDetector {
                                     if let Some(handle) = &app_handle {
                                         let path_string = path.to_string_lossy().to_string();
                                         log::debug!("📝 .slp file modified: {}", path_string);
-                                        
-                                        if let Err(e) = handle.emit("slp-file-modified", path_string) {
-                                            log::error!("❌ Failed to emit slp-file-modified event: {:?}", e);
+
+                                        if let Err(e) =
+                                            handle.emit("slp-file-modified", path_string)
+                                        {
+                                            log::error!(
+                                                "❌ Failed to emit slp-file-modified event: {:?}",
+                                                e
+                                            );
                                         }
                                     }
                                 }

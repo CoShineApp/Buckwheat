@@ -14,7 +14,7 @@
 		SidebarProvider,
 		SidebarTrigger
 	} from "$lib/components/ui/sidebar";
-	import { Home, Settings, Moon, Sun, Circle, Cloud, LogIn, User } from "@lucide/svelte";
+	import { Home, Settings, Moon, Sun, Circle, Cloud, LogIn, User, Scissors, Square, Loader2 } from "@lucide/svelte";
 	import type { Snippet } from "svelte";
 	import { navigation } from "$lib/stores/navigation.svelte";
 	import { settings } from "$lib/stores/settings.svelte";
@@ -25,12 +25,12 @@
 	import { onMount, onDestroy } from "svelte";
 	import { checkGameWindow, listGameWindows, getGameProcessName, setGameProcessName } from "$lib/commands.svelte";
 	import { invoke } from "@tauri-apps/api/core";
+	import { recordingsStore } from "$lib/stores/recordings.svelte";
 
 	let sidebarOpen = $state(true);
 	let { children }: { children?: Snippet } = $props();
 	let pollingInterval: number | undefined;
 	let showAuthModal = $state(false);
-
 	// Initialize settings and start game window polling
 	onMount(async () => {
 		console.log("🚀 AppLayout initializing...");
@@ -223,6 +223,7 @@
 		};
 		return configs[recording.status] || configs["no-window"];
 	});
+
 </script>
 
 <SidebarProvider bind:open={sidebarOpen}>
@@ -266,6 +267,16 @@
 							>
 								<Home />
 								<span>Home</span>
+							</SidebarMenuButton>
+						</SidebarMenuItem>
+						<SidebarMenuItem>
+							<SidebarMenuButton 
+								tooltipContent="Clips" 
+								onclick={() => navigation.navigateTo("clips")}
+								isActive={navigation.currentPage === "clips"}
+							>
+								<Scissors />
+								<span>Clips</span>
 							</SidebarMenuButton>
 						</SidebarMenuItem>
 						<SidebarMenuItem>
@@ -317,6 +328,33 @@
 			<div class="flex flex-1 items-center justify-between gap-2">
 				<h1 class="text-lg font-semibold text-sidebar-foreground">Peppi</h1>
 				<div class="flex items-center gap-2">
+					<Button
+						size="sm"
+						variant={recording.isRecording ? "destructive" : "default"}
+						class="flex items-center gap-2"
+						onclick={() =>
+							recording.isRecording
+								? recordingsStore.stopManualRecording()
+								: recordingsStore.startManualRecording()
+						}
+						disabled={recording.isRecording ? recordingsStore.isManualStopping : recordingsStore.isManualStarting}
+					>
+						{#if recording.isRecording}
+							{#if recordingsStore.isManualStopping}
+								<Loader2 class="size-4 animate-spin" />
+							{:else}
+								<Square class="size-4" />
+							{/if}
+							Stop
+						{:else}
+							{#if recordingsStore.isManualStarting}
+								<Loader2 class="size-4 animate-spin" />
+							{:else}
+								<Circle class="size-4 text-red-500" />
+							{/if}
+							Record
+						{/if}
+					</Button>
 					{#if auth.isAuthenticated && auth.user}
 						<Button variant="ghost" size="sm" onclick={() => navigation.navigateTo("profile")}>
 							<User class="size-4 mr-2" />

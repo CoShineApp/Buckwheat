@@ -102,8 +102,12 @@ impl WindowsRecorder {
         quality: super::RecordingQuality,
     ) -> Result<VideoEncoder, Error> {
         let bitrate = quality.bitrate();
-        log::info!("🎬 Building encoder with {:?} quality (bitrate: {} Mbps)", quality, bitrate / 1_000_000);
-        
+        log::info!(
+            "🎬 Building encoder with {:?} quality (bitrate: {} Mbps)",
+            quality,
+            bitrate / 1_000_000
+        );
+
         let video_settings = VideoSettingsBuilder::new(width, height)
             .sub_type(VideoSettingsSubType::H264)
             .frame_rate(TARGET_FPS)
@@ -124,7 +128,11 @@ impl WindowsRecorder {
 
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 impl Recorder for WindowsRecorder {
-    fn start_recording(&mut self, output_path: &str, quality: super::RecordingQuality) -> Result<(), Error> {
+    fn start_recording(
+        &mut self,
+        output_path: &str,
+        quality: super::RecordingQuality,
+    ) -> Result<(), Error> {
         if self.is_recording {
             return Err(Error::RecordingFailed("Already recording".into()));
         }

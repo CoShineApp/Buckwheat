@@ -119,7 +119,11 @@ impl MacOSRecorder {
         }
     }
 
-    fn initialize_stream(&mut self, output_path: &str, _quality: super::RecordingQuality) -> Result<(), Error> {
+    fn initialize_stream(
+        &mut self,
+        output_path: &str,
+        _quality: super::RecordingQuality,
+    ) -> Result<(), Error> {
         // Note: macOS implementation uses VideoWriter which doesn't currently support
         // configurable bitrate, but we accept the parameter for API consistency
         let window = self.find_dolphin_window()?;
@@ -161,13 +165,21 @@ impl MacOSRecorder {
 
 #[cfg(all(target_os = "macos", feature = "real-recording"))]
 impl Recorder for MacOSRecorder {
-    fn start_recording(&mut self, output_path: &str, quality: super::RecordingQuality) -> Result<(), Error> {
+    fn start_recording(
+        &mut self,
+        output_path: &str,
+        quality: super::RecordingQuality,
+    ) -> Result<(), Error> {
         if self.is_recording {
             return Err(Error::RecordingFailed("Already recording".into()));
         }
 
-        log::info!("🎥 [macOS] Starting recording to {} with {:?} quality (bitrate: {} Mbps)", 
-                   output_path, quality, quality.bitrate() / 1_000_000);
+        log::info!(
+            "🎥 [macOS] Starting recording to {} with {:?} quality (bitrate: {} Mbps)",
+            output_path,
+            quality,
+            quality.bitrate() / 1_000_000
+        );
         self.initialize_stream(output_path, quality)?;
 
         if let Some(stream_arc) = &self.stream {

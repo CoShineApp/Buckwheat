@@ -11,11 +11,13 @@
 	} from '$lib/components/ui/table';
 	import { cloudStorage, type Upload } from '$lib/stores/cloud-storage.svelte';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { Cloud, Download, Trash2, RefreshCw } from '@lucide/svelte';
+	import { Cloud, Download, Trash2, RefreshCw, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
+	import { save } from '@tauri-apps/plugin-dialog';
 
 	let isDeleting = $state<string | null>(null);
+	let isDownloading = $state<string | null>(null);
 
 	onMount(() => {
 		if (auth.isAuthenticated) {
@@ -25,12 +27,31 @@
 
 	async function handleDownload(upload: Upload) {
 		try {
-			// For now, just show a toast. In a full implementation, you'd want to
-			// prompt for download location using Tauri dialog
-			toast.info('Download functionality coming soon!');
+			// Prompt user for save location
+			const savePath = await save({
+				defaultPath: upload.filename,
+				filters: [{
+					name: 'Video',
+					extensions: ['mp4']
+				}]
+			});
+
+			if (!savePath) {
+				// User cancelled
+				return;
+			}
+
+			isDownloading = upload.id;
+			toast.info('Downloading video...');
+
+			await cloudStorage.downloadVideo(upload.id, savePath);
+			
+			toast.success('Video downloaded successfully!');
 		} catch (error) {
 			console.error('Download error:', error);
-			toast.error('Failed to download video');
+			toast.error(error instanceof Error ? error.message : 'Failed to download video');
+		} finally {
+			isDownloading = null;
 		}
 	}
 
@@ -119,8 +140,13 @@
 												variant="ghost" 
 												size="sm"
 												onclick={() => handleDownload(upload)}
+												disabled={isDownloading === upload.id}
 											>
-												<Download class="size-4" />
+												{#if isDownloading === upload.id}
+													<Loader2 class="size-4 animate-spin" />
+												{:else}
+													<Download class="size-4" />
+												{/if}
 											</Button>
 											<Button 
 												variant="ghost" 

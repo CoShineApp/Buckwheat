@@ -23,9 +23,9 @@ impl RecordingQuality {
     pub fn bitrate(&self) -> u32 {
         match self {
             RecordingQuality::Low => 5_000_000,     // 5 Mbps - good for 720p
-            RecordingQuality::Medium => 10_000_000,  // 10 Mbps - good for 1080p
-            RecordingQuality::High => 18_000_000,    // 18 Mbps - excellent for 1080p
-            RecordingQuality::Ultra => 35_000_000,   // 35 Mbps - excellent for 1440p+
+            RecordingQuality::Medium => 10_000_000, // 10 Mbps - good for 1080p
+            RecordingQuality::High => 18_000_000,   // 18 Mbps - excellent for 1080p
+            RecordingQuality::Ultra => 35_000_000,  // 35 Mbps - excellent for 1440p+
         }
     }
 }
@@ -37,7 +37,11 @@ impl Default for RecordingQuality {
 }
 
 pub trait Recorder {
-    fn start_recording(&mut self, output_path: &str, quality: RecordingQuality) -> Result<(), Error>;
+    fn start_recording(
+        &mut self,
+        output_path: &str,
+        quality: RecordingQuality,
+    ) -> Result<(), Error>;
     fn stop_recording(&mut self) -> Result<String, Error>;
     fn is_recording(&self) -> bool;
 }

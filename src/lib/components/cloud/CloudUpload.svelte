@@ -3,7 +3,7 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { cloudStorage } from '$lib/stores/cloud-storage.svelte';
 	import { auth } from '$lib/stores/auth.svelte';
-	import { Cloud, Upload, X, CheckCircle, AlertCircle } from '@lucide/svelte';
+	import { Cloud, Upload, X, CheckCircle, AlertCircle, XCircle } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	function clearCompleted() {
@@ -14,12 +14,19 @@
 		cloudStorage.removeFromQueue(id);
 	}
 
+	function cancelUpload(id: string) {
+		cloudStorage.cancelUpload(id);
+		toast.info('Upload cancelled');
+	}
+
 	function getStatusIcon(status: string) {
 		switch (status) {
 			case 'completed':
 				return CheckCircle;
 			case 'error':
 				return AlertCircle;
+			case 'cancelled':
+				return XCircle;
 			default:
 				return Upload;
 		}
@@ -31,6 +38,8 @@
 				return 'text-green-500';
 			case 'error':
 				return 'text-red-500';
+			case 'cancelled':
+				return 'text-yellow-500';
 			case 'uploading':
 				return 'text-blue-500';
 			default:
@@ -91,7 +100,16 @@
 							{/if}
 						</div>
 
-						{#if item.status === 'completed' || item.status === 'error'}
+						{#if item.status === 'uploading'}
+							<Button 
+								variant="ghost" 
+								size="sm" 
+								onclick={() => cancelUpload(item.id)}
+								title="Cancel upload"
+							>
+								<X class="size-4" />
+							</Button>
+						{:else if item.status === 'completed' || item.status === 'error' || item.status === 'cancelled'}
 							<Button 
 								variant="ghost" 
 								size="sm" 
