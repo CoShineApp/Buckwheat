@@ -1,7 +1,7 @@
 pub mod mock;
 
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
-pub mod windows;
+pub mod windows_v2;
 
 #[cfg(all(target_os = "macos", feature = "real-recording"))]
 pub mod macos;
@@ -57,8 +57,8 @@ pub fn get_recorder() -> Box<dyn Recorder + Send> {
 
     #[cfg(all(target_os = "windows", feature = "real-recording"))]
     {
-        log::info!("🪟 Initializing Windows recorder with windows-record (real-recording enabled)");
-        Box::new(windows::WindowsRecorder::new())
+        log::info!("🪟 Initializing Windows recorder with windows-capture 2.0 (hardware encoder + audio)");
+        Box::new(windows_v2::WindowsRecorder::new())
     }
 
     #[cfg(not(feature = "real-recording"))]

@@ -13,9 +13,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 default = []
 # Enable real screen recording (requires Xcode on macOS, VS on Windows)
 real-recording = [
-    "screencapturekit",
     "windows-capture",
-    "wasapi",
+    "cpal",
+    "screencapturekit",
     "objc",
     "core-foundation",
     "core-media-rs",
@@ -49,16 +49,18 @@ walkdir = "2"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 # FFmpeg for clip extraction
 ffmpeg-sidecar = "2.0"
+# Windows screen capture using Windows.Graphics.Capture API (2.0 has built-in encoder)
+windows-capture = { version = "2.0.0-alpha.7", optional = true }
+# Cross-platform audio capture (for WASAPI loopback on Windows)
+cpal = { version = "0.15", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-capture = { version = "2.0.0-alpha.7", optional = true }
-wasapi = { version = "0.21", optional = true }
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
     "Win32_Graphics_Dwm",
-    "Win32_Graphics_Gdi"
+    "Win32_Graphics_Gdi",
 ] }
 
 # MacOS-specific recording using screencapturekit-rs crate

@@ -119,9 +119,19 @@ jobs:
         run: bun install -g @tauri-apps/cli@latest
 
       - name: Build frontend
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLIPS_CDN_URL: ${{ secrets.VITE_CLIPS_CDN_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: bun run build
 
       - name: Build Tauri app (Windows)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLIPS_CDN_URL: ${{ secrets.VITE_CLIPS_CDN_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         # env:
         #   # Placeholder for Windows code signing (uncomment when ready)
         #   # CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
@@ -184,9 +194,19 @@ jobs:
         run: bun install -g @tauri-apps/cli@latest
 
       - name: Build frontend
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLIPS_CDN_URL: ${{ secrets.VITE_CLIPS_CDN_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: bun run build
 
       - name: Build Tauri app (macOS)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CLIPS_CDN_URL: ${{ secrets.VITE_CLIPS_CDN_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         # env:
         #   # Placeholder for macOS code signing (uncomment when ready)
         #   # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

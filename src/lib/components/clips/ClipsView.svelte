@@ -34,6 +34,7 @@
 				clip.video_path,
 				deviceId,
 				{
+		
 					slippi_metadata: clip.slippi_metadata,
 					duration: clip.duration,
 				}
