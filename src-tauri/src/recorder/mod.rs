@@ -57,7 +57,7 @@ pub fn get_recorder() -> Box<dyn Recorder + Send> {
 
     #[cfg(all(target_os = "windows", feature = "real-recording"))]
     {
-        log::info!("🪟 Initializing Windows recorder with windows-capture 2.0 (hardware encoder + audio)");
+        log::info!("🪟 Initializing Windows recorder with windows-capture 2.0 (H.264 hardware encoder + cpal audio)");
         Box::new(windows_v2::WindowsRecorder::new())
     }
 

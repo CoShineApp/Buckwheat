@@ -28,7 +28,7 @@ use std::time::Instant;
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 use windows_capture::{
     capture::{CaptureControl, Context, GraphicsCaptureApiHandler},
-    encoder::{AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder},
+    encoder::{AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder, VideoSettingsSubType},
     frame::Frame,
     graphics_capture_api::InternalCaptureControl,
     monitor::Monitor,
@@ -84,14 +84,15 @@ impl GraphicsCaptureApiHandler for FrameHandler {
         let flags = ctx.flags;
         
         info!(
-            "Initializing VideoEncoder: {}x{}, audio: {}, bitrate: {} Mbps",
+            "Initializing VideoEncoder: {}x{}, codec: H.264, audio: {}, bitrate: {} Mbps",
             flags.width, flags.height,
             if flags.enable_audio { "enabled (cpal)" } else { "disabled" },
             flags.bitrate / 1_000_000
         );
 
-        // Build video settings
+        // Build video settings - use H.264 for universal playback (HEVC requires paid codec on Windows)
         let video_settings = VideoSettingsBuilder::new(flags.width, flags.height)
+            .sub_type(VideoSettingsSubType::H264)
             .bitrate(flags.bitrate);
 
         // Build audio settings - we'll provide audio via send_audio_buffer()

@@ -72,7 +72,7 @@
 		}
 
 		if (videoElement) {
-			console.log('dYZ? Initializing video player with source:', videoSrc);
+			console.log('🎬 Initializing video player with source:', videoSrc);
 
 			// Initialize Plyr with aspect ratio preservation
 			plyrInstance = new Plyr(videoElement, {
@@ -114,13 +114,13 @@
 
 					duration = plyrInstance.duration;
 					ondurationchange?.(duration);
-					console.log('dY"S Video duration:', duration);
+					console.log('📊 Video duration:', duration);
 				}
 			});
 
 			// Listen for errors
 			plyrInstance.on('error', (error) => {
-				console.error('??O Video player error:', error);
+				console.error('❌ Video player error:', error);
 			});
 		}
 	});
@@ -166,19 +166,20 @@
 	}
 
 	.player-wrapper :global(.plyr__video-wrapper) {
-		display: flex !important;
-		align-items: center !important;
-		justify-content: center !important;
+		position: relative !important;
 		width: 100% !important;
 		height: 100% !important;
 		padding-bottom: 0 !important;
 		background-color: #000;
 	}
 
-	.player-wrapper :global(video) {
-		object-fit: contain !important;
+	.player-wrapper :global(.plyr__video-wrapper video) {
+		position: absolute !important;
+		top: 0 !important;
+		left: 0 !important;
 		width: 100% !important;
 		height: 100% !important;
+		object-fit: contain !important;
 		background-color: #000;
 	}
 </style>
