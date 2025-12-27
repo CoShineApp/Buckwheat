@@ -11,7 +11,8 @@
 		TableRow,
 	} from "$lib/components/ui/table";
 	import { recordingsStore } from "$lib/stores/recordings.svelte";
-	import { formatRelativeTime, formatFileSize, getStageName } from "$lib/utils/characters";
+	import { getStageName } from "$lib/utils/characters";
+	import { formatRelativeTime, formatFileSize } from "$lib/utils/format";
 	import CharacterIcon from "./CharacterIcon.svelte";
 	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2 } from "@lucide/svelte";
 	import { invoke } from "@tauri-apps/api/core";

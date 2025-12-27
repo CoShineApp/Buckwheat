@@ -1,23 +1,51 @@
+/**
+ * Settings store for persisting user preferences.
+ * Uses Tauri's plugin-store for cross-session persistence.
+ *
+ * @example
+ * // Initialize on app startup
+ * await settings.init();
+ *
+ * // Read settings reactively
+ * if (settings.theme === 'dark') {
+ *   document.body.classList.add('dark');
+ * }
+ *
+ * // Update a setting
+ * await settings.set('theme', 'dark');
+ *
+ * @module stores/settings
+ */
+
 import { Store } from "@tauri-apps/plugin-store";
 
+/**
+ * Application settings shape.
+ * All settings are persisted to disk.
+ */
 export type Settings = {
-	// Appearance
+	/** UI theme preference */
 	theme: "light" | "dark" | "system";
-	
-	// Recording
+
+	/** Directory where recordings are saved */
 	recordingPath: string;
+	/** Video quality preset for recordings */
 	recordingQuality: "low" | "medium" | "high" | "ultra";
+	/** Whether to auto-start recording when game is detected */
 	autoStartRecording: boolean;
-	
-	// Slippi
+
+	/** Directory where Slippi .slp files are saved */
 	slippiPath: string;
+	/** Whether to watch for new .slp files */
 	watchForGames: boolean;
-	
-	// Clips
+
+	/** Keyboard shortcut for creating clips */
 	createClipHotkey: string;
+	/** Duration in seconds for clips */
 	clipDuration: number;
 };
 
+/** Default settings values */
 const DEFAULT_SETTINGS: Settings = {
 	theme: "system",
 	recordingPath: "",
@@ -29,21 +57,40 @@ const DEFAULT_SETTINGS: Settings = {
 	clipDuration: 30,
 };
 
+/**
+ * Manages application settings with persistent storage.
+ * Settings are reactive and automatically saved to disk.
+ */
 class SettingsStore {
+	/** Tauri store instance for persistence */
 	private store: Store | null = null;
-	
-	// Reactive state
+
+	// Reactive state for each setting
+	/** Current UI theme */
 	theme = $state<Settings["theme"]>("system");
+	/** Recording output directory */
 	recordingPath = $state("");
+	/** Video quality preset */
 	recordingQuality = $state<Settings["recordingQuality"]>("high");
+	/** Auto-start recording on game detection */
 	autoStartRecording = $state(true);
+	/** Slippi replay directory */
 	slippiPath = $state("");
+	/** Watch for new .slp files */
 	watchForGames = $state(true);
+	/** Hotkey for clip creation */
 	createClipHotkey = $state("F9");
+	/** Clip duration in seconds */
 	clipDuration = $state(30);
-	
+
+	/** Whether settings are currently loading */
 	isLoading = $state(true);
 
+	/**
+	 * Initialize the settings store.
+	 * Loads settings from disk or uses defaults.
+	 * Must be called before accessing settings.
+	 */
 	async init(): Promise<void> {
 		// Idempotent - only initialize once
 		if (this.store) {
@@ -61,6 +108,7 @@ class SettingsStore {
 		}
 	}
 
+	/** Load settings from persistent store */
 	private async load(): Promise<void> {
 		if (!this.store) return;
 
@@ -75,6 +123,7 @@ class SettingsStore {
 		this.clipDuration = settings.clipDuration;
 	}
 
+	/** Reset reactive state to default values */
 	private loadDefaults(): void {
 		this.theme = DEFAULT_SETTINGS.theme;
 		this.recordingPath = DEFAULT_SETTINGS.recordingPath;
@@ -86,6 +135,7 @@ class SettingsStore {
 		this.clipDuration = DEFAULT_SETTINGS.clipDuration;
 	}
 
+	/** Get all settings from persistent store */
 	private async getAll(): Promise<Settings> {
 		if (!this.store) return DEFAULT_SETTINGS;
 
@@ -101,6 +151,12 @@ class SettingsStore {
 		};
 	}
 
+	/**
+	 * Update a setting value.
+	 * Updates reactive state immediately and persists to disk.
+	 * @param key - Setting key to update
+	 * @param value - New value for the setting
+	 */
 	async set<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> {
 		// Update local state immediately for reactivity
 		switch (key) {
@@ -137,6 +193,10 @@ class SettingsStore {
 		}
 	}
 
+	/**
+	 * Reset all settings to their default values.
+	 * Persists the defaults to disk.
+	 */
 	async reset(): Promise<void> {
 		if (!this.store) return;
 
@@ -160,5 +220,6 @@ class SettingsStore {
 	}
 }
 
+/** Singleton settings store instance */
 export const settings = new SettingsStore();
 

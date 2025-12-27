@@ -1,0 +1,216 @@
+# Cursor Rules for Bunbun Project
+
+## ⚠️ MANDATORY WORKFLOW FOR LINEAR ISSUES ⚠️
+
+**WHEN USER MENTIONS A LINEAR ISSUE, YOU MUST FOLLOW THESE STEPS IN ORDER - NO EXCEPTIONS:**
+
+1. **FIRST: Fetch the Linear Issue via MCP**
+   - Use `mcp_Linear_get_issue` with the issue ID (e.g., PEP-6)
+   - **DO NOT** start coding until you have fetched the issue
+   - **DO NOT** make assumptions about requirements
+
+2. **SECOND: Read the Issue Description Completely**
+   - Check for specific library requirements (e.g., "use scap crate")
+   - Check for implementation details or constraints
+   - Check for any linked resources or documentation
+   - **DO NOT** proceed if you haven't read the full description
+
+3. **THIRD: Create GitHub Branch**
+   - Branch name format: `linear/[issue-id]-[short-description]`
+   - Example: `linear/PEP-6-setup-macos-recording-functionality`
+   - Create from `main` (or default branch)
+   - **DO NOT** write any code until branch is created
+   - Use: `git checkout -b linear/[issue-id]-[short-description]`
+
+4. **FOURTH: Then Start Implementation**
+   - Use the exact libraries/tools specified in the issue
+   - Follow any implementation guidelines from the issue
+   - Reference the issue ID in commit messages
+
+5. **FIFTH: DO NOT COMMIT WITHOUT USER PERMISSION**
+   - **NEVER** commit changes unless user explicitly asks
+   - **WAIT** for user to say "commit", "push", or similar
+   - Exception: Only commit if user explicitly requests it
+   - Bug fixes, changes, features - all wait for user approval
+
+**VIOLATION OF THIS WORKFLOW IS A CRITICAL ERROR. ALWAYS CHECK LINEAR FIRST.**
+
+## Project Overview
+This is a Tauri 2 desktop application built with Svelte 5, TypeScript, and Tailwind CSS. The project uses Svelte 5 runes syntax and follows modern Svelte patterns.
+
+DO NOT USE NPM USE BUN IN THIS HOUSEHOLD
+
+## Tech Stack
+- **Frontend**: Svelte 5 (with runes), TypeScript
+- **Desktop**: Tauri 2
+- **Styling**: Tailwind CSS 4
+- **UI Components**: shadcn-svelte (uses bits-ui)
+- **Build Tool**: Vite
+- **Backend**: Rust (Tauri commands)
+
+## Component Library Priority
+
+### **CRITICAL: Use shadcn-svelte Components First**
+- **ALWAYS** check if a shadcn-svelte component exists before creating a custom component
+- **NEVER** create custom UI components when a shadcn-svelte equivalent exists
+- Use `npx shadcn-svelte@latest add [component]` to add components from the registry
+- Browse available components at: https://shadcn-svelte.com/docs/components
+- Components are installed to `src/lib/components/ui/` via the CLI
+- **ONLY** create custom components when no shadcn-svelte component exists or when building domain-specific components that compose shadcn-svelte primitives
+- When building custom components, compose them from existing shadcn-svelte components rather than building from scratch
+
+## Svelte 5 Rules
+
+### State Management
+- **ALWAYS** use `$state()` for reactive local state, never `let` with `$:` reactive statements
+- **ALWAYS** use `$props()` for component props, never `export let`
+- Use `$derived()` or `$derived.by()` for computed values
+- Use `$effect()` for side effects instead of reactive statements
+- Use `$effect.pre()` for effects that run before DOM updates
+
+### Component Patterns
+- Use `Snippet` type from `svelte` for children/slots
+- Prefer `{@render children?.()}` pattern for slot rendering
+- Use `host:` directive for event bindings and context
+- Avoid `createEventDispatcher` - use props with callbacks or context instead
+
+### Example Component Structure
+```svelte
+<script lang="ts">
+  import type { Snippet } from "svelte";
+  
+  let count = $state(0);
+  let { title, children }: { title: string; children?: Snippet } = $props();
+  
+  let doubled = $derived(count * 2);
+  
+  $effect(() => {
+    console.log("Count changed:", count);
+  });
+</script>
+```
+
+## TypeScript Rules
+
+### Type Safety
+- Always use explicit types for function parameters and return values
+- Use `type` for object shapes and unions, `interface` for extensible contracts
+- Prefer `const` assertions for literal types
+- Use `satisfies` when you need type checking without narrowing
+
+### Import Patterns
+- Use `$lib` alias for imports from `src/lib/`
+- Group imports: external packages, then internal modules
+- Use type-only imports when appropriate: `import type { ... }`
+
+## Tailwind CSS Rules
+
+### Styling Guidelines
+- **ALWAYS** use Tailwind utility classes for styling
+- **NEVER** use inline `style` attributes or `<style>` blocks
+- Use `clsx` and `tailwind-merge` for conditional classes
+- Follow the existing design system patterns (sidebar, card, etc.)
+- Use semantic color tokens (e.g., `bg-sidebar-primary`) when available
+
+### Class Organization
+- Group related classes together (layout, spacing, colors, etc.)
+- Use responsive prefixes when needed: `md:`, `lg:`, etc.
+- Prefer composition over long class strings
+
+## Tauri Rules
+
+### Frontend-Backend Communication
+- Use `@tauri-apps/api` for Tauri commands
+- Define command types in TypeScript for type safety
+- Handle errors gracefully with try-catch blocks
+- Use async/await for all Tauri command calls
+
+### File Structure
+- Frontend code in `src/`
+- Tauri backend code in `src-tauri/`
+- Shared types should be defined in TypeScript (frontend) or Rust (backend)
+
+## File Organization
+
+### Component Structure
+- Components in `src/lib/components/`
+- UI primitives in `src/lib/components/ui/`
+- Each UI component should have its own directory with `index.ts` for exports
+- Use PascalCase for component file names
+
+### Utility Functions
+- Utility functions in `src/lib/utils.ts`
+- Use named exports for utilities
+- Keep utilities pure and testable
+
+### Routes
+- Route files follow SvelteKit conventions: `+layout.svelte`, `+page.svelte`
+- Layouts in `src/lib/routes/`
+
+## Code Style
+
+### Formatting
+- Use tabs for indentation (2 spaces equivalent)
+- Use semicolons
+- Trailing commas in multi-line objects/arrays
+- Single quotes for strings (or double if project uses double)
+
+### Naming Conventions
+- Components: PascalCase (`AppLayout.svelte`)
+- Files: kebab-case for non-components (`is-mobile.svelte.ts`)
+- Variables/functions: camelCase
+- Constants: UPPER_SNAKE_CASE
+- Types: PascalCase
+
+### Best Practices
+- Keep components small and focused
+- Extract reusable logic into composables or utilities
+- Use TypeScript strict mode
+- Prefer composition over inheritance
+- Write self-documenting code with clear variable names
+
+## Error Handling
+
+### Frontend
+- Use try-catch for async operations
+- Provide user-friendly error messages
+- Log errors appropriately (console.error in dev, proper logging in prod)
+
+### Tauri Commands
+- Return Result types from Rust commands
+- Handle errors in TypeScript with proper error types
+
+## Performance
+
+### Optimization
+- Use `$derived()` for expensive computations
+- Avoid unnecessary re-renders with proper state management
+- Lazy load components when appropriate
+- Use Vite's code splitting features
+
+## Testing Considerations
+- Write testable, pure functions
+- Keep side effects isolated
+- Use dependency injection patterns where appropriate
+
+## Git Workflow
+- Write clear, descriptive commit messages
+- Keep commits focused and atomic
+- Follow conventional commit format when possible
+- **Linear Issue Branches**: **MANDATORY** - See "MANDATORY WORKFLOW FOR LINEAR ISSUES" at top of file
+  - Branch format: `linear/[issue-id]-[short-description]`
+  - Example: `linear/ABC-123-add-cloud-upload` or `linear/XYZ-456-fix-settings-bug`
+  - **MUST** create branch BEFORE writing any code
+  - Reference Linear issue ID in commit messages: `[ABC-123] Add cloud upload feature`
+  - **NO CODE CHANGES UNTIL BRANCH EXISTS**
+
+## Task Tracking
+
+## Additional Notes
+- The project uses `components.json` for shadcn-svelte component configuration
+- Components are managed via the shadcn-svelte CLI: `npx shadcn-svelte@latest add [component]`
+- Icons from `@lucide/svelte`
+- The app is a Slippi recorder for SSBM (Super Smash Bros. Melee)
+- Backend handles game detection and recording functionality
+- **Remember**: Always prefer shadcn-svelte components over custom implementations
+

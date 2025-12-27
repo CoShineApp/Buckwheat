@@ -1,7 +1,24 @@
+/**
+ * Error handling utilities for Tauri commands.
+ * Provides user-friendly error messages and toast notifications.
+ *
+ * @example
+ * import { handleTauriError, showSuccess } from '$lib/utils/errors';
+ *
+ * try {
+ *   await invoke('some_command');
+ *   showSuccess('Operation completed!');
+ * } catch (e) {
+ *   handleTauriError(e, 'Failed to do something');
+ * }
+ *
+ * @module utils/errors
+ */
+
 import { toast } from "svelte-sonner";
 
 /**
- * Tauri error structure from Rust
+ * Error structure returned by Tauri commands from Rust backend.
  */
 interface TauriError {
 	message: string;
@@ -22,7 +39,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 /**
- * Get user-friendly error message from Tauri error
+ * Extract a user-friendly message from various error types.
+ * @param error - Error from Tauri command, JS Error, or unknown
+ * @returns Human-readable error message
  */
 function getErrorMessage(error: TauriError | Error | unknown): string {
 	// Handle Tauri error objects
@@ -53,9 +72,12 @@ function getErrorMessage(error: TauriError | Error | unknown): string {
 }
 
 /**
- * Handle Tauri errors and show toast notification
- * Use this from any component when catching Tauri command errors
- * 
+ * Handle Tauri errors with user feedback.
+ * Logs the error to console and shows a toast notification.
+ *
+ * @param error - The caught error (from Tauri command or other source)
+ * @param context - Optional context message to prepend (e.g., "Failed to start recording")
+ *
  * @example
  * try {
  *   await invoke("start_recording", { outputPath });
@@ -78,7 +100,8 @@ export function handleTauriError(
 }
 
 /**
- * Show success toast
+ * Show a success toast notification.
+ * @param message - Success message to display
  */
 export function showSuccess(message: string): void {
 	toast.success(message, {
@@ -87,7 +110,8 @@ export function showSuccess(message: string): void {
 }
 
 /**
- * Show info toast
+ * Show an informational toast notification.
+ * @param message - Info message to display
  */
 export function showInfo(message: string): void {
 	toast.info(message, {

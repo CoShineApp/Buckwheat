@@ -1,30 +1,58 @@
+/**
+ * Authentication store for managing user sessions with Supabase.
+ * Handles sign up, sign in, sign out, and profile management.
+ *
+ * @example
+ * // Check if user is authenticated
+ * if (auth.isAuthenticated) {
+ *   console.log('Logged in as:', auth.user?.email);
+ * }
+ *
+ * // Sign in
+ * const result = await auth.signIn('user@example.com', 'password');
+ * if (result.success) {
+ *   console.log('Signed in successfully');
+ * }
+ *
+ * @module stores/auth
+ */
+
 import { createClient, type User, type Session } from '@supabase/supabase-js';
+import type { Profile } from '$lib/types/auth';
+
+// Re-export types for convenience
+export type { Profile } from '$lib/types/auth';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export interface Profile {
-	id: string;
-	device_id: string | null;
-	storage_used: number;
-	storage_limit: number;
-	created_at: string;
-	updated_at: string;
-}
-
+/**
+ * Manages authentication state and Supabase integration.
+ * Automatically initializes on construction and listens for auth changes.
+ */
 class AuthStore {
+	/** Current authenticated user, null if not logged in */
 	user = $state<User | null>(null);
+	/** Current session with access token */
 	session = $state<Session | null>(null);
+	/** User's profile with storage quota info */
 	profile = $state<Profile | null>(null);
+	/** Whether auth state is being loaded */
 	loading = $state(true);
+	/** Last error message, null if no error */
 	error = $state<string | null>(null);
+	/** Supabase client instance */
 	supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 	constructor() {
 		this.init();
 	}
 
-	async init() {
+	/**
+	 * Initialize auth state by getting current session and setting up listeners.
+	 * Called automatically on construction.
+	 */
+	private async init() {
 		try {
 			// Get initial session
 			const { data: { session } } = await this.supabase.auth.getSession();
@@ -55,6 +83,10 @@ class AuthStore {
 		}
 	}
 
+	/**
+	 * Load the user's profile from the database.
+	 * Updates the profile state with storage quota information.
+	 */
 	async loadProfile() {
 		if (!this.user) return;
 
@@ -76,6 +108,12 @@ class AuthStore {
 		}
 	}
 
+	/**
+	 * Create a new user account.
+	 * @param email - User's email address
+	 * @param password - User's password
+	 * @returns Result object with success status and optional error
+	 */
 	async signUp(email: string, password: string) {
 		try {
 			this.loading = true;
@@ -102,6 +140,12 @@ class AuthStore {
 		}
 	}
 
+	/**
+	 * Sign in with email and password.
+	 * @param email - User's email address
+	 * @param password - User's password
+	 * @returns Result object with success status and optional error
+	 */
 	async signIn(email: string, password: string) {
 		try {
 			this.loading = true;
@@ -127,6 +171,11 @@ class AuthStore {
 		}
 	}
 
+	/**
+	 * Sign out the current user.
+	 * Clears user, session, and profile state.
+	 * @returns Result object with success status and optional error
+	 */
 	async signOut() {
 		try {
 			this.loading = true;
@@ -153,29 +202,38 @@ class AuthStore {
 		}
 	}
 
+	/**
+	 * Get the current access token for API calls.
+	 * @returns Access token string or undefined if not authenticated
+	 */
 	getToken(): string | undefined {
 		return this.session?.access_token;
 	}
 
+	/** Whether user is currently authenticated */
 	get isAuthenticated(): boolean {
 		return this.user !== null;
 	}
 
+	/** Percentage of storage quota used (0-100) */
 	get storageUsedPercent(): number {
 		if (!this.profile) return 0;
 		return (this.profile.storage_used / this.profile.storage_limit) * 100;
 	}
 
+	/** Storage used in gigabytes */
 	get storageUsedGB(): number {
 		if (!this.profile) return 0;
 		return this.profile.storage_used / (1024 ** 3);
 	}
 
+	/** Storage limit in gigabytes */
 	get storageLimitGB(): number {
 		if (!this.profile) return 0;
 		return this.profile.storage_limit / (1024 ** 3);
 	}
 }
 
+/** Singleton auth store instance */
 export const auth = new AuthStore();
 
