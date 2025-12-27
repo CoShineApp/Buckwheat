@@ -284,16 +284,17 @@ pub async fn start_watching(
             }
         }
 
-        // Start recording and track the file
+        // Start recording and track the file (strip JSON quotes from payload)
+        let slp_path_clean = slp_path.trim_matches('"');
         if let Ok(mut current_file) = state_ref.current_recording_file.lock() {
-            *current_file = Some(slp_path.to_string());
+            *current_file = Some(slp_path_clean.to_string());
             log::info!(
                 "Tracking recording file for game end detection: {}",
-                slp_path
+                slp_path_clean
             );
         }
 
-        let slp_path_for_recording = slp_path.to_string();
+        let slp_path_for_recording = slp_path_clean.to_string();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = trigger_auto_recording(app_handle, slp_path_for_recording).await {
                 log::error!("Failed to trigger auto-recording: {:?}", e);
@@ -311,9 +312,28 @@ pub async fn start_watching(
         let state_ref = app_clone2_inner.state::<AppState>();
 
         // Check if this is the file we're currently recording
+        // Note: stored path is MP4 output, modified path is SLP input - compare by base filename
         if let Ok(current_file) = state_ref.current_recording_file.lock() {
             if let Some(recording_file) = current_file.as_ref() {
-                if recording_file == modified_path {
+                // Strip JSON quotes from payload for comparison
+                let modified_path_clean = modified_path.trim_matches('"');
+                
+                // Extract base filenames (without extension) for comparison
+                let stored_base = std::path::Path::new(recording_file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("");
+                let modified_base = std::path::Path::new(modified_path_clean)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("");
+                
+                log::info!("Comparing base filenames for auto-stop:");
+                log::info!("  stored:   '{}' (from {})", stored_base, recording_file);
+                log::info!("  modified: '{}' (from {})", modified_base, modified_path_clean);
+                log::info!("  equal: {}", stored_base == modified_base && !stored_base.is_empty());
+                
+                if stored_base == modified_base && !stored_base.is_empty() {
                     log::info!("Detected modification of recording file - game ended!");
                     drop(current_file); // Drop the lock before spawning task
 
@@ -1954,19 +1974,40 @@ pub async fn process_clip_markers(
     log::info!("⏱Clip duration: {}s", clip_duration);
 
     // Get markers for this recording
+    // Markers may be stored with .slp path but we receive .mp4 path, so match by base filename
+    let recording_base = Path::new(&recording_file)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&recording_file);
+    
+    log::debug!("Looking for clip markers matching base: {}", recording_base);
+    
     let markers = {
         let mut markers_lock = state.clip_markers.lock().map_err(|e| {
             Error::InitializationError(format!("Failed to lock clip markers: {}", e))
         })?;
 
+        // Match by base filename (without extension) to handle .slp vs .mp4 mismatch
         let recording_markers: Vec<_> = markers_lock
             .iter()
-            .filter(|m| m.recording_file == recording_file)
+            .filter(|m| {
+                let marker_base = Path::new(&m.recording_file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(&m.recording_file);
+                marker_base == recording_base
+            })
             .cloned()
             .collect();
 
-        // Remove processed markers
-        markers_lock.retain(|m| m.recording_file != recording_file);
+        // Remove processed markers (also match by base filename)
+        markers_lock.retain(|m| {
+            let marker_base = Path::new(&m.recording_file)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&m.recording_file);
+            marker_base != recording_base
+        });
 
         recording_markers
     };

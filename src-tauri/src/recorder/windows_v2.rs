@@ -140,19 +140,33 @@ impl GraphicsCaptureApiHandler for FrameHandler {
         }
 
         // Initialize start time on first frame
-        if state.start_time.is_none() {
+        let is_first_frame = state.start_time.is_none();
+        if is_first_frame {
             state.start_time = Some(Instant::now());
             info!("First frame received, recording started");
+            
+            // Discard any audio buffered before first frame to sync A/V
+            if let Some(ref receiver) = state.audio_receiver {
+                let mut discarded = 0usize;
+                while let Ok(buffer) = receiver.try_recv() {
+                    discarded += buffer.len();
+                }
+                if discarded > 0 {
+                    info!("Discarded {} bytes of pre-buffered audio for A/V sync", discarded);
+                }
+            }
         }
 
         state.frame_count += 1;
         let frame_count = state.frame_count;
         
-        // Collect audio data from cpal
+        // Collect audio data from cpal (only after first frame)
         let mut audio_data = Vec::new();
-        if let Some(ref receiver) = state.audio_receiver {
-            while let Ok(buffer) = receiver.try_recv() {
-                audio_data.extend(buffer);
+        if !is_first_frame {
+            if let Some(ref receiver) = state.audio_receiver {
+                while let Ok(buffer) = receiver.try_recv() {
+                    audio_data.extend(buffer);
+                }
             }
         }
         
@@ -162,10 +176,10 @@ impl GraphicsCaptureApiHandler for FrameHandler {
         if let Some(ref mut encoder) = self.encoder {
             encoder.send_frame(frame)?;
             
-            // Send audio if we have any
+            // Send audio if we have any (skip on first frame - already discarded)
             if !audio_data.is_empty() {
                 if let Err(e) = encoder.send_audio_buffer(&audio_data, 0) {
-                    if frame_count == 1 {
+                    if frame_count == 2 {
                         warn!("Audio send error: {}", e);
                     }
                 }
@@ -174,7 +188,7 @@ impl GraphicsCaptureApiHandler for FrameHandler {
 
         // Log progress
         if frame_count == 1 {
-            info!("First frame encoded (audio buffer: {} bytes)", audio_data.len());
+            info!("First frame encoded (audio sync started)");
         } else if frame_count % 300 == 0 {
             debug!("Encoded {} frames", frame_count);
         }
