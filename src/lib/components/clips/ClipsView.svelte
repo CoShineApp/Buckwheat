@@ -3,26 +3,50 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { clipsStore, type ClipSession } from '$lib/stores/clips.svelte';
 	import { cloudStorage } from '$lib/stores/cloud-storage.svelte';
-	import { auth } from '$lib/stores/auth.svelte';
 	import { navigation } from '$lib/stores/navigation.svelte';
-	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink } from '@lucide/svelte';
+	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink, Cloud, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 	let isDeleting = $state<string | null>(null);
 	let isUploading = $state<string | null>(null);
-	let shareDialog = $state<{ clip: ClipSession; shareCode: string; url: string } | null>(null);
+	let shareDialog = $state<{ clip: ClipSession; shareCode: string; url: string; alreadyExists: boolean } | null>(null);
 
 	onMount(() => {
 		clipsStore.refresh();
+		// Also load cloud clips to check which are already uploaded
+		cloudStorage.refreshUserClips();
 	});
 
 	function handlePlay(clip: ClipSession) {
-	navigation.navigateToReplay(clip.id, { isClip: true });
+		navigation.navigateToReplay(clip.id, { isClip: true });
+	}
+
+	// Check if clip is already in cloud
+	function isClipInCloud(clip: ClipSession): boolean {
+		return cloudStorage.isClipUploaded(clip.filename);
+	}
+
+	// Get share code for already-uploaded clip
+	function getExistingShareCode(clip: ClipSession): string | null {
+		return cloudStorage.getClipShareCode(clip.filename);
 	}
 
 	async function handleShare(clip: ClipSession) {
+		// Check if already uploaded - if so, just show share dialog immediately
+		const existingShareCode = getExistingShareCode(clip);
+		if (existingShareCode) {
+			shareDialog = {
+				clip,
+				shareCode: existingShareCode,
+				url: `https://clips.peppi.app/${existingShareCode}`,
+				alreadyExists: true,
+			};
+			return;
+		}
+
+		// Otherwise, upload the clip
 		isUploading = clip.id;
 		try {
 			// Get device ID
@@ -30,11 +54,10 @@
 			
 			// Upload clip to cloud
 			toast.info('Uploading clip...');
-			const result = await cloudStorage.createPublicClip(
+			const { clip: cloudClip, alreadyExists } = await cloudStorage.createPublicClip(
 				clip.video_path,
 				deviceId,
 				{
-		
 					slippi_metadata: clip.slippi_metadata,
 					duration: clip.duration,
 				}
@@ -43,11 +66,16 @@
 			// Show share dialog
 			shareDialog = {
 				clip,
-				shareCode: result.share_code,
-				url: `https://clips.peppi.app/${result.share_code}`,
+				shareCode: cloudClip.share_code,
+				url: `https://clips.peppi.app/${cloudClip.share_code}`,
+				alreadyExists,
 			};
 			
-			toast.success('Clip uploaded successfully!');
+			if (alreadyExists) {
+				toast.success('Clip was already uploaded!');
+			} else {
+				toast.success('Clip uploaded successfully!');
+			}
 		} catch (error) {
 			console.error('Upload error:', error);
 			toast.error(error instanceof Error ? error.message : 'Failed to upload clip');
@@ -187,6 +215,12 @@
 									<div class="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
 										<Play class="size-5 text-white drop-shadow-lg fill-white" />
 									</div>
+									<!-- Cloud badge for uploaded clips -->
+									{#if isClipInCloud(clip)}
+										<div class="absolute top-1 right-1 bg-primary/90 rounded-full p-0.5" title="Uploaded to cloud">
+											<Cloud class="size-3 text-primary-foreground" />
+										</div>
+									{/if}
 								</button>
 							{:else}
 								<button
@@ -195,6 +229,12 @@
 									class="relative w-24 h-24 bg-muted flex items-center justify-center cursor-pointer hover:bg-muted/80 transition-colors rounded-md"
 								>
 									<Scissors class="size-5 text-muted-foreground" />
+									<!-- Cloud badge for uploaded clips -->
+									{#if isClipInCloud(clip)}
+										<div class="absolute top-1 right-1 bg-primary/90 rounded-full p-0.5" title="Uploaded to cloud">
+											<Cloud class="size-3 text-primary-foreground" />
+										</div>
+									{/if}
 								</button>
 							{/if}
 						</div>
@@ -227,14 +267,20 @@
 								Play
 							</Button>
 							<Button 
-								variant="outline" 
+								variant={isClipInCloud(clip) ? "default" : "outline"}
 								size="sm"
 								class="h-7 w-7 p-0"
 								onclick={() => handleShare(clip)}
 								disabled={isUploading === clip.id}
-								title="Share"
+								title={isClipInCloud(clip) ? "Copy share link" : "Share"}
 							>
-								<Share2 class="size-3" />
+								{#if isUploading === clip.id}
+									<Loader2 class="size-3 animate-spin" />
+								{:else if isClipInCloud(clip)}
+									<Cloud class="size-3" />
+								{:else}
+									<Share2 class="size-3" />
+								{/if}
 							</Button>
 							<Button 
 								variant="outline" 
@@ -265,9 +311,19 @@
 			onclick={(e) => e.stopPropagation()}
 		>
 			<CardHeader>
-				<CardTitle>Clip Shared Successfully!</CardTitle>
+				<CardTitle>
+					{#if shareDialog.alreadyExists}
+						Share Clip
+					{:else}
+						Clip Shared Successfully!
+					{/if}
+				</CardTitle>
 				<CardDescription>
-					Your clip has been uploaded and is now publicly accessible
+					{#if shareDialog.alreadyExists}
+						This clip is already in the cloud. Copy the link to share it!
+					{:else}
+						Your clip has been uploaded and is now publicly accessible
+					{/if}
 				</CardDescription>
 			</CardHeader>
 			<CardContent class="space-y-4">

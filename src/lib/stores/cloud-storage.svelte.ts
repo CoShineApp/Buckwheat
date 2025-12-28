@@ -40,12 +40,71 @@ export interface UploadQueueItem {
 	xhr?: XMLHttpRequest;
 }
 
+// Unified cloud item type for combined view
+export interface CloudItem {
+	id: string;
+	type: 'recording' | 'clip';
+	filename: string;
+	file_size: number;
+	uploaded_at: string;
+	share_code?: string;
+	metadata: any | null;
+}
+
 class CloudStorageStore {
 	uploads = $state<Upload[]>([]);
-	clips = $state<Clip[]>([]);
+	userClips = $state<Clip[]>([]);
 	uploadQueue = $state<UploadQueueItem[]>([]);
 	loading = $state(false);
+	clipsLoading = $state(false);
 	error = $state<string | null>(null);
+	private deviceId: string | null = null;
+
+	// Unified view of all cloud items (uploads + clips)
+	get allCloudItems(): CloudItem[] {
+		const uploadItems: CloudItem[] = this.uploads.map(u => ({
+			id: u.id,
+			type: 'recording' as const,
+			filename: u.filename,
+			file_size: u.file_size,
+			uploaded_at: u.uploaded_at,
+			metadata: u.metadata,
+		}));
+		
+		const clipItems: CloudItem[] = this.userClips.map(c => ({
+			id: c.id,
+			type: 'clip' as const,
+			filename: c.filename,
+			file_size: c.file_size,
+			uploaded_at: c.uploaded_at,
+			share_code: c.share_code,
+			metadata: c.metadata,
+		}));
+		
+		return [...uploadItems, ...clipItems].sort(
+			(a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+		);
+	}
+
+	get totalCloudItems(): number {
+		return this.uploads.length + this.userClips.length;
+	}
+
+	// Check if a local clip has been uploaded to cloud
+	isClipUploaded(filename: string): boolean {
+		return this.userClips.some(c => c.filename === filename);
+	}
+
+	// Get share code for an already-uploaded clip
+	getClipShareCode(filename: string): string | null {
+		const clip = this.userClips.find(c => c.filename === filename);
+		return clip?.share_code ?? null;
+	}
+
+	// Get full clip data for an uploaded clip
+	getUploadedClip(filename: string): Clip | null {
+		return this.userClips.find(c => c.filename === filename) ?? null;
+	}
 
 	async refreshUploads() {
 		if (!auth.isAuthenticated || !auth.user) {
@@ -74,6 +133,62 @@ class CloudStorageStore {
 		} finally {
 			this.loading = false;
 		}
+	}
+
+	async refreshUserClips() {
+		try {
+			this.clipsLoading = true;
+			
+			// Get device ID if not cached
+			if (!this.deviceId) {
+				try {
+					this.deviceId = await invoke<string>('get_device_id');
+				} catch (err) {
+					console.warn('Could not get device ID:', err);
+				}
+			}
+
+			// Build query - fetch by user_id OR device_id
+			let query = auth.supabase
+				.from('clips')
+				.select('*')
+				.order('uploaded_at', { ascending: false });
+
+			if (auth.isAuthenticated && auth.user) {
+				// If authenticated, get clips by user_id or device_id
+				if (this.deviceId) {
+					query = query.or(`user_id.eq.${auth.user.id},device_id.eq.${this.deviceId}`);
+				} else {
+					query = query.eq('user_id', auth.user.id);
+				}
+			} else if (this.deviceId) {
+				// If not authenticated, only get by device_id
+				query = query.eq('device_id', this.deviceId);
+			} else {
+				// No way to identify user's clips
+				this.userClips = [];
+				return;
+			}
+
+			const { data, error } = await query;
+
+			if (error) throw error;
+
+			this.userClips = data || [];
+			console.log(`☁️ Loaded ${this.userClips.length} user clip(s) from cloud`);
+		} catch (err) {
+			console.error('Error fetching user clips:', err);
+		} finally {
+			this.clipsLoading = false;
+		}
+	}
+
+	// Refresh both uploads and clips
+	async refreshAll() {
+		await Promise.all([
+			this.refreshUploads(),
+			this.refreshUserClips(),
+		]);
 	}
 
 	async uploadVideo(videoPath: string, metadata?: any) {
@@ -337,14 +452,14 @@ class CloudStorageStore {
 		}
 	}
 
-	async createPublicClip(videoPath: string, deviceId: string, metadata?: any) {
+	async createPublicClip(videoPath: string, deviceId: string, metadata?: any): Promise<{ clip: Clip; alreadyExists: boolean }> {
 		try {
 			// Read file to get size
 			const fileBuffer = await readFile(videoPath);
 			const fileName = videoPath.split(/[\\/]/).pop()!;
 			const fileSize = fileBuffer.length;
 
-			// Step 1: Get signed upload URL and create clip record
+			// Step 1: Get signed upload URL and create clip record (or get existing)
 			const { data: signedData, error: urlError } = await auth.supabase.functions.invoke('generate-clip-upload-url', {
 				body: {
 					fileName,
@@ -355,6 +470,14 @@ class CloudStorageStore {
 			});
 
 			if (urlError) throw urlError;
+
+			// Check if clip already exists
+			if (signedData?.alreadyExists) {
+				console.log('☁️ Clip already uploaded, returning existing:', signedData.shareCode);
+				// Refresh user clips to ensure we have the latest
+				await this.refreshUserClips();
+				return { clip: signedData.clip, alreadyExists: true };
+			}
 
 			if (!signedData?.uploadUrl || !signedData?.clip) {
 				throw new Error('No upload URL received from server');
@@ -388,8 +511,9 @@ class CloudStorageStore {
 				xhr.send(fileBuffer);
 			});
 
-			// Step 3: Return clip data (database record already created)
-			return signedData.clip;
+			// Step 3: Refresh user clips and return
+			await this.refreshUserClips();
+			return { clip: signedData.clip, alreadyExists: false };
 		} catch (err) {
 			console.error('Error creating public clip:', err);
 			throw err;

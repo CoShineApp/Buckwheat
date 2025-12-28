@@ -68,13 +68,45 @@ Deno.serve(async (req) => {
       throw new Error(`Missing required fields: fileName=${!!fileName}, fileSize=${!!fileSize}, deviceId=${!!deviceId}`)
     }
     
+    // Check for existing clip with same device_id + filename
+    console.log('🔧 Step 4: Checking for existing clip')
+    const existingQuery = supabase
+      .from('clips')
+      .select('*')
+      .eq('device_id', deviceId)
+      .eq('filename', fileName)
+    
+    // Also check by user_id if authenticated
+    if (userId) {
+      existingQuery.or(`user_id.eq.${userId}`)
+    }
+    
+    const { data: existingClips } = await existingQuery
+    
+    if (existingClips && existingClips.length > 0) {
+      const existing = existingClips[0]
+      console.log('✅ Found existing clip:', existing.share_code)
+      return new Response(JSON.stringify({ 
+        clip: existing, 
+        shareCode: existing.share_code, 
+        alreadyExists: true 
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      })
+    }
+    console.log('✅ No existing clip found, creating new one')
+    
     // Generate share code
-    console.log('🔧 Step 4: Generating share code')
+    console.log('🔧 Step 5: Generating share code')
     const shareCode = generateShareCode()
     console.log('✅ Share code generated:', shareCode)
     
     // Generate signed upload URL for clips bucket
-    console.log('🔧 Step 5: Setting up S3 client')
+    console.log('🔧 Step 6: Setting up S3 client')
     const b2Endpoint = Deno.env.get('B2_ENDPOINT')
     const b2Region = Deno.env.get('B2_REGION')
     const b2KeyId = Deno.env.get('B2_KEY_ID')
@@ -107,7 +139,7 @@ Deno.serve(async (req) => {
     console.log('✅ S3 client created')
 
     const key = `clips/${shareCode}/${fileName}`
-    console.log('🔧 Step 6: Creating PutObjectCommand, key:', key)
+    console.log('🔧 Step 7: Creating PutObjectCommand, key:', key)
     const command = new PutObjectCommand({
       Bucket: b2BucketClips,
       Key: key,
@@ -115,12 +147,12 @@ Deno.serve(async (req) => {
     })
     console.log('✅ PutObjectCommand created')
 
-    console.log('🔧 Step 7: Generating signed URL')
+    console.log('🔧 Step 8: Generating signed URL')
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 }) // 15 min
     console.log('✅ Signed URL generated:', uploadUrl.substring(0, 50) + '...')
 
     // Create database record (will be updated to complete after upload)
-    console.log('🔧 Step 8: Creating database record')
+    console.log('🔧 Step 9: Creating database record')
     const insertData = {
       user_id: userId,
       device_id: deviceId,

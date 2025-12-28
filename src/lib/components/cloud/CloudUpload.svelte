@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { cloudStorage } from '$lib/stores/cloud-storage.svelte';
-	import { auth } from '$lib/stores/auth.svelte';
-	import { Cloud, Upload, X, CheckCircle, AlertCircle, XCircle } from '@lucide/svelte';
+	import { Upload, X, CheckCircle, AlertCircle, XCircle, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	function clearCompleted() {
@@ -27,6 +26,9 @@
 				return AlertCircle;
 			case 'cancelled':
 				return XCircle;
+			case 'uploading':
+			case 'pending':
+				return Loader2;
 			default:
 				return Upload;
 		}
@@ -41,94 +43,111 @@
 			case 'cancelled':
 				return 'text-yellow-500';
 			case 'uploading':
+			case 'pending':
 				return 'text-blue-500';
 			default:
 				return 'text-muted-foreground';
 		}
 	}
+
+	function isActiveUpload(status: string) {
+		return status === 'uploading' || status === 'pending';
+	}
+
+	const hasItems = $derived(cloudStorage.uploadQueue.length > 0);
+	const activeCount = $derived(cloudStorage.uploadQueue.filter(i => isActiveUpload(i.status)).length);
+	const hasCompletedOrFailed = $derived(
+		cloudStorage.uploadQueue.some(i => ['completed', 'error', 'cancelled'].includes(i.status))
+	);
 </script>
 
-{#if auth.isAuthenticated}
+<!-- Only show when there are items in the queue -->
+{#if hasItems}
 	<Card>
-		<CardHeader>
+		<CardHeader class="py-3 px-4">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-2">
-					<Cloud class="size-5" />
-					<CardTitle>Upload Queue</CardTitle>
+					{#if activeCount > 0}
+						<Loader2 class="size-4 animate-spin text-blue-500" />
+					{:else}
+						<Upload class="size-4" />
+					{/if}
+					<CardTitle class="text-sm">
+						{#if activeCount > 0}
+							Uploading {activeCount} file{activeCount !== 1 ? 's' : ''}...
+						{:else}
+							Upload Queue
+						{/if}
+					</CardTitle>
 				</div>
-				{#if cloudStorage.uploadQueue.length > 0}
-					<Button variant="ghost" size="sm" onclick={clearCompleted}>
-						Clear Completed
+				{#if hasCompletedOrFailed}
+					<Button variant="ghost" size="sm" class="h-7 text-xs" onclick={clearCompleted}>
+						Clear
 					</Button>
 				{/if}
 			</div>
-			<CardDescription>
-				{cloudStorage.uploadQueue.length === 0 
-					? 'No uploads in progress' 
-					: `${cloudStorage.uploadQueue.length} item(s) in queue`}
-			</CardDescription>
 		</CardHeader>
 
-		{#if cloudStorage.uploadQueue.length > 0}
-			<CardContent class="space-y-3">
-				{#each cloudStorage.uploadQueue as item (item.id)}
-					<div class="flex items-center gap-3 p-3 rounded-lg border bg-card">
-						<svelte:component 
-							this={getStatusIcon(item.status)} 
-							class="size-5 {getStatusColor(item.status)}" 
-						/>
+		<CardContent class="py-2 px-4 space-y-2">
+			{#each cloudStorage.uploadQueue as item (item.id)}
+				<div class="flex items-center gap-2 py-1.5 px-2 rounded-md border bg-muted/30">
+					<svelte:component 
+						this={getStatusIcon(item.status)} 
+						class="size-4 flex-shrink-0 {getStatusColor(item.status)} {isActiveUpload(item.status) ? 'animate-spin' : ''}" 
+					/>
 
-						<div class="flex-1 min-w-0">
-							<p class="text-sm font-medium truncate">
-								{item.videoPath.split(/[\\/]/).pop()}
-							</p>
-							
-							{#if item.status === 'uploading' || item.status === 'pending'}
-								<div class="mt-1 w-full bg-secondary rounded-full h-1.5 overflow-hidden">
-									<div 
-										class="h-full bg-primary transition-all duration-300"
-										style="width: {item.progress}%"
-									></div>
-								</div>
-								<p class="text-xs text-muted-foreground mt-1">
-									{item.progress.toFixed(0)}%
-								</p>
-							{:else if item.status === 'error'}
-								<p class="text-xs text-red-500 mt-1">{item.error}</p>
-							{:else if item.status === 'completed'}
-								<p class="text-xs text-green-500 mt-1">Upload complete</p>
-							{/if}
-						</div>
-
-						{#if item.status === 'uploading'}
-							<Button 
-								variant="ghost" 
-								size="sm" 
-								onclick={() => cancelUpload(item.id)}
-								title="Cancel upload"
-							>
-								<X class="size-4" />
-							</Button>
-						{:else if item.status === 'completed' || item.status === 'error' || item.status === 'cancelled'}
-							<Button 
-								variant="ghost" 
-								size="sm" 
-								onclick={() => removeItem(item.id)}
-							>
-								<X class="size-4" />
-							</Button>
+					<div class="flex-1 min-w-0">
+						<p class="text-xs font-medium truncate">
+							{item.videoPath.split(/[\\/]/).pop()}
+						</p>
+						
+						{#if isActiveUpload(item.status)}
+							<div class="mt-1 w-full bg-secondary rounded-full h-1 overflow-hidden">
+								<div 
+									class="h-full bg-primary transition-all duration-300"
+									style="width: {item.progress}%"
+								></div>
+							</div>
+						{:else if item.status === 'error'}
+							<p class="text-[10px] text-red-500 truncate">{item.error}</p>
 						{/if}
 					</div>
-				{/each}
-			</CardContent>
-		{/if}
-	</Card>
-{:else}
-	<Card>
-		<CardHeader>
-			<CardTitle>Cloud Upload</CardTitle>
-			<CardDescription>Log in to upload recordings to cloud storage</CardDescription>
-		</CardHeader>
+
+					<span class="text-[10px] text-muted-foreground flex-shrink-0">
+						{#if isActiveUpload(item.status)}
+							{item.progress.toFixed(0)}%
+						{:else if item.status === 'completed'}
+							Done
+						{:else if item.status === 'error'}
+							Failed
+						{:else if item.status === 'cancelled'}
+							Cancelled
+						{/if}
+					</span>
+
+					{#if item.status === 'uploading'}
+						<Button 
+							variant="ghost" 
+							size="sm" 
+							class="h-6 w-6 p-0"
+							onclick={() => cancelUpload(item.id)}
+							title="Cancel upload"
+						>
+							<X class="size-3" />
+						</Button>
+					{:else if item.status !== 'pending'}
+						<Button 
+							variant="ghost" 
+							size="sm"
+							class="h-6 w-6 p-0" 
+							onclick={() => removeItem(item.id)}
+							title="Remove"
+						>
+							<X class="size-3" />
+						</Button>
+					{/if}
+				</div>
+			{/each}
+		</CardContent>
 	</Card>
 {/if}
-
