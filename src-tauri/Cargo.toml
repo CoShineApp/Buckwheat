@@ -49,6 +49,8 @@ walkdir = "2"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 # FFmpeg for clip extraction
 ffmpeg-sidecar = "2.0"
+# SQLite database for local stats storage
+rusqlite = { version = "0.32", features = ["bundled"] }
 # Windows screen capture using Windows.Graphics.Capture API (2.0 has built-in encoder)
 windows-capture = { version = "2.0.0-alpha.7", optional = true }
 # Cross-platform audio capture (for WASAPI loopback on Windows)

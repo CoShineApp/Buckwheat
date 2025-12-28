@@ -5,7 +5,7 @@
 
 	interface Props {
 		characterId: CharacterId | number;
-		size?: "sm" | "md" | "lg";
+		size?: "xs" | "sm" | "md" | "lg";
 		colorIndex?: number;
 	}
 
@@ -16,6 +16,7 @@
 
 	// Size mappings
 	const sizeClasses = {
+		xs: "size-6",
 		sm: "size-8",
 		md: "size-12",
 		lg: "size-16",

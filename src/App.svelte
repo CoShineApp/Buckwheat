@@ -7,6 +7,7 @@
 	import CloudUpload from "$lib/components/cloud/CloudUpload.svelte";
 	import UserProfile from "$lib/components/auth/UserProfile.svelte";
 	import ClipsView from "$lib/components/clips/ClipsView.svelte";
+	import StatsView from "$lib/components/stats/StatsView.svelte";
 	import { Toaster } from "$lib/components/ui/sonner";
 	import { navigation } from "$lib/stores/navigation.svelte";
 </script>
@@ -16,6 +17,8 @@
 <AppLayout>
 	{#if navigation.currentPage === "home"}
 		<AppHome />
+	{:else if navigation.currentPage === "stats"}
+		<StatsView />
 	{:else if navigation.currentPage === "settings"}
 		<AppSettings />
 	{:else if navigation.currentPage === "replay" && navigation.replayId}

@@ -1,6 +1,7 @@
 mod app_state;
 mod clip_processor;
 mod commands;
+mod database;
 mod game_detector;
 mod recorder;
 mod slippi;
@@ -17,6 +18,10 @@ use commands::slippi::{
     set_game_process_name, start_generic_recording, start_recording, start_watching,
     stop_recording, stop_watching,
 };
+use commands::stats::{
+    calculate_game_stats, get_aggregate_stats, get_player_stats, get_recording_stats,
+    sync_stats_to_cloud,
+};
 use tauri::Manager;
 
 #[allow(clippy::missing_panics_doc)]
@@ -28,7 +33,25 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             // Initialize app state
-            app.manage(app_state::AppState::new());
+            let state = app_state::AppState::new();
+            
+            // Initialize stats database
+            let app_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+            let db_path = app_dir.join("stats.db");
+            
+            match database::StatsDatabase::new(db_path) {
+                Ok(db) => {
+                    *state.stats_db.lock().unwrap() = Some(db);
+                    log::info!("✅ Stats database initialized");
+                }
+                Err(e) => {
+                    log::error!("❌ Failed to initialize stats database: {:?}", e);
+                    // Continue without stats database - non-critical feature
+                }
+            }
+            
+            app.manage(state);
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -74,6 +97,12 @@ pub fn run() {
             compress_video_for_upload,
             delete_temp_file,
             get_device_id,
+            // Stats commands
+            calculate_game_stats,
+            get_recording_stats,
+            get_player_stats,
+            get_aggregate_stats,
+            sync_stats_to_cloud,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

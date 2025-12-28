@@ -1,3 +1,4 @@
+use crate::database::StatsDatabase;
 use crate::game_detector::GameDetector;
 use crate::recorder::Recorder;
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,7 @@ pub struct AppState {
     pub last_file_modification: Mutex<Option<Instant>>,
     pub clip_markers: Mutex<Vec<ClipMarker>>,
     pub slp_cache: Mutex<HashMap<String, SlpCacheEntry>>,
+    pub stats_db: Mutex<Option<StatsDatabase>>,
 }
 
 impl AppState {
@@ -42,6 +44,7 @@ impl AppState {
             last_file_modification: Mutex::new(None),
             clip_markers: Mutex::new(Vec::new()),
             slp_cache: Mutex::new(HashMap::new()),
+            stats_db: Mutex::new(None),
         }
     }
 }

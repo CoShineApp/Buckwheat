@@ -18,14 +18,12 @@
  */
 
 /** Available page identifiers */
-type Page = "home" | "settings" | "replay" | "cloud" | "profile" | "clips";
+type Page = "home" | "settings" | "replay" | "cloud" | "profile" | "clips" | "stats";
 
 /** Page state with type-safe replay info */
 type PageInfo<TPage extends Page = Page> = TPage extends "replay"
 	? { page: "replay"; replay: { id: string; isClip?: boolean } }
-	: TPage extends "clips"
-	? { page: "clips"; replay?: undefined }
-	: { page: Exclude<Page, "replay" | "clips">; replay?: undefined };
+	: { page: Exclude<Page, "replay">; replay?: undefined };
 
 /**
  * Manages navigation state for the single-page application.
@@ -56,10 +54,10 @@ class NavigationStore {
 	}
 
 	/**
-	 * Navigate to a standard page (not replay or clips).
+	 * Navigate to a standard page (not replay).
 	 * @param page - Target page identifier
 	 */
-	navigateTo(page: Exclude<Page, "replay" | "clips">): void {
+	navigateTo(page: Exclude<Page, "replay">): void {
 		this._state = { page };
 	}
 

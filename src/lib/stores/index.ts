@@ -33,3 +33,6 @@ export { recordingsStore } from './recordings.svelte';
 export { settings } from './settings.svelte';
 export type { Settings } from './settings.svelte';
 
+// Stats store
+export { statsStore } from './stats.svelte';
+

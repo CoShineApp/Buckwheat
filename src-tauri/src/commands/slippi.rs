@@ -2,10 +2,8 @@ use crate::app_state::AppState;
 use crate::commands::errors::Error;
 use crate::game_detector::{slippi_paths, GameDetector};
 use crate::recorder;
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use sysinfo::System;
 use tauri::{Emitter, Listener, Manager, State};
 use walkdir::WalkDir;
 
@@ -498,6 +496,28 @@ async fn get_recording_directory_internal(app: &tauri::AppHandle) -> Result<Stri
         .ok_or_else(|| Error::InvalidPath("Failed to convert path to string".to_string()))
 }
 
+async fn get_slippi_directory(app: &tauri::AppHandle) -> Result<String, Error> {
+    use tauri_plugin_store::StoreExt;
+
+    let store = app
+        .store("settings.json")
+        .map_err(|e| Error::InitializationError(format!("Failed to open settings store: {}", e)))?;
+
+    if let Some(value) = store.get("slippiPath") {
+        if let Some(path) = value.as_str() {
+            if !path.is_empty() {
+                return Ok(path.to_string());
+            }
+        }
+    }
+
+    // Use default Slippi path
+    Ok(slippi_paths::get_default_slippi_path()
+        .to_str()
+        .unwrap_or("")
+        .to_string())
+}
+
 /// Stop watching for new games
 #[tauri::command]
 pub async fn stop_watching(state: State<'_, AppState>) -> Result<(), Error> {
@@ -561,54 +581,86 @@ pub async fn stop_recording(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, Error> {
-    let mut recorder_lock = state
-        .recorder
-        .lock()
-        .map_err(|e| Error::RecordingFailed(format!("Failed to lock recorder: {}", e)))?;
+    let output_path = {
+        let mut recorder_lock = state
+            .recorder
+            .lock()
+            .map_err(|e| Error::RecordingFailed(format!("Failed to lock recorder: {}", e)))?;
 
-    if let Some(recorder) = recorder_lock.as_mut() {
-        let output_path = recorder.stop_recording()?;
+        if let Some(recorder) = recorder_lock.as_mut() {
+            let path = recorder.stop_recording()?;
 
-        // Clean up recorder
-        *recorder_lock = None;
-
-        let marker_snapshot = {
-            let markers = state.clip_markers.lock().map_err(|e| {
-                Error::InitializationError(format!("Failed to lock clip markers: {}", e))
-            })?;
-            markers
-                .iter()
-                .filter(|m| m.recording_file == output_path)
-                .map(|m| m.timestamp_seconds)
-                .collect::<Vec<_>>()
-        };
-
-        if marker_snapshot.is_empty() {
-            log::info!("No clip markers queued for {}", output_path);
+            // Clean up recorder
+            *recorder_lock = None;
+            
+            path
         } else {
-            log::info!("Clip markers for {}: {:?}", output_path, marker_snapshot);
+            return Err(Error::RecordingFailed(
+                "No active recording to stop".to_string(),
+            ));
         }
+    }; // recorder_lock is dropped here
 
-        if let Err(e) = app.emit("recording-stopped", output_path.clone()) {
-            log::error!("Failed to emit recording-stopped event: {:?}", e);
-        }
+    let marker_snapshot = {
+        let markers = state.clip_markers.lock().map_err(|e| {
+            Error::InitializationError(format!("Failed to lock clip markers: {}", e))
+        })?;
+        markers
+            .iter()
+            .filter(|m| m.recording_file == output_path)
+            .map(|m| m.timestamp_seconds)
+            .collect::<Vec<_>>()
+    };
 
-        if let Ok(mut current_file) = state.current_recording_file.lock() {
-            if current_file
-                .as_ref()
-                .map(|s| s == &output_path)
-                .unwrap_or(false)
-            {
-                *current_file = None;
-            }
-        }
-
-        Ok(output_path)
+    if marker_snapshot.is_empty() {
+        log::info!("No clip markers queued for {}", output_path);
     } else {
-        Err(Error::RecordingFailed(
-            "No active recording to stop".to_string(),
-        ))
+        log::info!("Clip markers for {}: {:?}", output_path, marker_snapshot);
     }
+
+    if let Err(e) = app.emit("recording-stopped", output_path.clone()) {
+        log::error!("Failed to emit recording-stopped event: {:?}", e);
+    }
+
+    if let Ok(mut current_file) = state.current_recording_file.lock() {
+        if current_file
+            .as_ref()
+            .map(|s| s == &output_path)
+            .unwrap_or(false)
+        {
+            *current_file = None;
+        }
+    }
+
+    // Auto-calculate stats if .slp file exists
+    let video_filename = std::path::Path::new(&output_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    
+    if video_filename.starts_with("Game_") {
+        // Try to find matching .slp file
+        let slippi_dir = get_slippi_directory(&app).await.unwrap_or_default();
+        if let Some(slp_path) = find_matching_slp(video_filename, &slippi_dir).await {
+            log::info!("🎯 Found matching .slp file, calculating stats in background...");
+            let app_handle = app.clone();
+            let output_path_clone = output_path.clone();
+            
+            // Spawn background task to calculate stats (don't block recording stop)
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = crate::commands::stats::calculate_game_stats(
+                    app_handle.clone(),
+                    slp_path,
+                    output_path_clone,
+                    app_handle.state(),
+                ).await {
+                    log::warn!("Failed to calculate game stats: {:?}", e);
+                }
+            });
+        }
+    }
+
+    Ok(output_path)
 }
 
 /// Delete a recording (video and optionally .slp file)
@@ -1463,7 +1515,7 @@ pub async fn check_game_window(state: State<'_, AppState>) -> Result<bool, Error
         .settings
         .lock()
         .map_err(|e| Error::InitializationError(format!("Failed to lock settings: {}", e)))?;
-    let stored_id = settings
+    let _stored_id = settings
         .get("game_process_name")
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())

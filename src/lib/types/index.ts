@@ -12,4 +12,5 @@ export * from './auth';
 export * from './clip';
 export * from './cloud';
 export * from './recording';
+export * from './stats';
 
