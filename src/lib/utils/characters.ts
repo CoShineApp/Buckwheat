@@ -1,6 +1,19 @@
+/**
+ * Melee character and stage data utilities.
+ * Provides mappings for character/stage IDs to names, slugs, and image paths.
+ *
+ * @example
+ * import { getCharacterName, getCharacterImage, getStageName } from '$lib/utils/characters';
+ *
+ * const name = getCharacterName(CharacterId.FOX); // "Fox"
+ * const image = getCharacterImage(CharacterId.FOX); // "/characters/fox.png"
+ *
+ * @module utils/characters
+ */
+
 import { CharacterId, StageId } from "$lib/types/recording";
 
-// Character names for display
+/** Human-readable names for each character ID */
 export const CHARACTER_NAMES: Record<CharacterId, string> = {
 	[CharacterId.CAPTAIN_FALCON]: "Captain Falcon",
 	[CharacterId.DONKEY_KONG]: "Donkey Kong",
@@ -30,10 +43,10 @@ export const CHARACTER_NAMES: Record<CharacterId, string> = {
 	[CharacterId.GANONDORF]: "Ganondorf",
 };
 
-// Character images are now served from /static/characters/
-// No need for external URLs - all images are local!
-
-// Stage names for display
+/**
+ * Human-readable names for each stage ID.
+ * Only legal tournament stages are included.
+ */
 export const STAGE_NAMES: Record<number, string> = {
 	[StageId.FOUNTAIN_OF_DREAMS]: "Fountain of Dreams",
 	[StageId.POKEMON_STADIUM]: "Pokémon Stadium",
@@ -43,12 +56,20 @@ export const STAGE_NAMES: Record<number, string> = {
 	[StageId.FINAL_DESTINATION]: "Final Destination",
 };
 
-// Get character name by ID with fallback
+/**
+ * Get the display name for a character ID.
+ * @param characterId - Character ID from Slippi data
+ * @returns Human-readable character name, or "Unknown Character (id)" if not found
+ */
 export function getCharacterName(characterId: CharacterId | number): string {
 	return CHARACTER_NAMES[characterId as CharacterId] || `Unknown Character (${characterId})`;
 }
 
-// Get character slug for file paths
+/**
+ * Get the URL-safe slug for a character (used in file paths).
+ * @param characterId - Character ID from Slippi data
+ * @returns Kebab-case slug (e.g., "captain-falcon")
+ */
 export function getCharacterSlug(characterId: CharacterId | number): string {
 	const slugs: Record<CharacterId, string> = {
 		[CharacterId.CAPTAIN_FALCON]: "captain-falcon",
@@ -81,14 +102,23 @@ export function getCharacterSlug(characterId: CharacterId | number): string {
 	return slugs[characterId as CharacterId] || "unknown";
 }
 
-// Get character image URL by ID (uses local static assets)
+/**
+ * Get the path to a character's stock icon image.
+ * Images are served from /static/characters/.
+ * @param characterId - Character ID from Slippi data
+ * @returns Path to character image (e.g., "/characters/fox.png")
+ */
 export function getCharacterImage(characterId: CharacterId | number): string {
 	const slug = getCharacterSlug(characterId);
 	// Use local static asset
 	return `/characters/${slug}.png`;
 }
 
-// Get stage slug for file paths
+/**
+ * Get the URL-safe slug for a stage (used in file paths).
+ * @param stageId - Stage ID from Slippi data
+ * @returns Kebab-case slug (e.g., "fountain-of-dreams")
+ */
 export function getStageSlug(stageId: StageId | number): string {
 	const slugs: Record<number, string> = {
 		[StageId.FOUNTAIN_OF_DREAMS]: "fountain-of-dreams",
@@ -101,48 +131,23 @@ export function getStageSlug(stageId: StageId | number): string {
 	return slugs[stageId] || "unknown";
 }
 
-// Get stage image path
+/**
+ * Get the path to a stage's preview image.
+ * Images are served from /static/stages/.
+ * @param stageId - Stage ID from Slippi data
+ * @returns Path to stage image (e.g., "/stages/battlefield.jpg")
+ */
 export function getStageImage(stageId: StageId | number): string {
 	const slug = getStageSlug(stageId);
 	return `/stages/${slug}.jpg`;
 }
 
-// Get stage name by ID with fallback
+/**
+ * Get the display name for a stage ID.
+ * @param stageId - Stage ID from Slippi data
+ * @returns Human-readable stage name, or "Unknown Stage (id)" if not found
+ */
 export function getStageName(stageId: StageId | number): string {
 	return STAGE_NAMES[stageId] || `Unknown Stage (${stageId})`;
 }
 
-// Format game duration from frames to readable time
-export function formatGameDuration(frames: number): string {
-	const seconds = Math.floor(frames / 60); // Melee runs at 60 FPS
-	const minutes = Math.floor(seconds / 60);
-	const remainingSeconds = seconds % 60;
-	return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
-
-// Format file size to human readable
-export function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-// Format relative time (e.g., "2 hours ago")
-export function formatRelativeTime(timestamp: string): string {
-	const now = new Date();
-	const then = new Date(timestamp);
-	const diffMs = now.getTime() - then.getTime();
-	const diffSeconds = Math.floor(diffMs / 1000);
-	const diffMinutes = Math.floor(diffSeconds / 60);
-	const diffHours = Math.floor(diffMinutes / 60);
-	const diffDays = Math.floor(diffHours / 24);
-
-	if (diffSeconds < 60) return "just now";
-	if (diffMinutes < 60) return `${diffMinutes}m ago`;
-	if (diffHours < 24) return `${diffHours}h ago`;
-	if (diffDays < 7) return `${diffDays}d ago`;
-	
-	// Return formatted date for older items
-	return then.toLocaleDateString();
-}

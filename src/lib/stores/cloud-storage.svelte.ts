@@ -1,62 +1,44 @@
+/**
+ * Cloud storage store for managing video uploads to Backblaze B2.
+ * Handles upload queue, progress tracking, and cloud clip management.
+ *
+ * @example
+ * // Upload a video
+ * await cloudStorage.uploadVideo('/path/to/video.mp4', { recording_id: '123' });
+ *
+ * // Check upload progress
+ * cloudStorage.uploadQueue.forEach(item => {
+ *   console.log(`${item.videoPath}: ${item.progress}%`);
+ * });
+ *
+ * // Refresh uploads list
+ * await cloudStorage.refreshUploads();
+ *
+ * @module stores/cloud-storage
+ */
+
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { auth } from './auth.svelte';
+import type { Upload, CloudClip, UploadQueueItem } from '$lib/types/cloud';
 
-export interface Upload {
-	id: string;
-	user_id: string;
-	filename: string;
-	b2_file_id: string | null;
-	b2_file_name: string | null;
-	file_size: number;
-	duration_seconds: number | null;
-	uploaded_at: string;
-	metadata: any | null;
-	status: 'UPLOADING' | 'UPLOADED' | 'FAILED';
-}
+// Re-export types for convenience
+export type { Upload, CloudClip, UploadQueueItem } from '$lib/types/cloud';
 
-export interface Clip {
-	id: string;
-	user_id: string | null;
-	device_id: string | null;
-	filename: string;
-	b2_file_id: string | null;
-	b2_file_name: string | null;
-	file_size: number;
-	duration_seconds: number | null;
-	share_code: string;
-	uploaded_at: string;
-	metadata: any | null;
-}
-
-export interface UploadQueueItem {
-	id: string;
-	videoPath: string;
-	status: 'pending' | 'uploading' | 'completed' | 'error' | 'cancelled';
-	progress: number;
-	error?: string;
-	uploadId?: string;
-	abortController?: AbortController;
-	xhr?: XMLHttpRequest;
-}
-
-// Unified cloud item type for combined view
-export interface CloudItem {
-	id: string;
-	type: 'recording' | 'clip';
-	filename: string;
-	file_size: number;
-	uploaded_at: string;
-	share_code?: string;
-	metadata: any | null;
-}
-
+/**
+ * Manages cloud storage uploads, downloads, and public clip sharing.
+ * Integrates with Backblaze B2 via Supabase Edge Functions.
+ */
 class CloudStorageStore {
+	/** List of completed uploads for the current user */
 	uploads = $state<Upload[]>([]);
-	userClips = $state<Clip[]>([]);
+	/** List of public clips (shared via share codes) */
+	clips = $state<CloudClip[]>([]);
+	/** Current upload queue with progress tracking */
 	uploadQueue = $state<UploadQueueItem[]>([]);
+	/** Whether data is being loaded */
 	loading = $state(false);
-	clipsLoading = $state(false);
+	/** Last error message */
 	error = $state<string | null>(null);
 	private deviceId: string | null = null;
 
@@ -106,6 +88,10 @@ class CloudStorageStore {
 		return this.userClips.find(c => c.filename === filename) ?? null;
 	}
 
+	/**
+	 * Fetch the user's uploads from the database.
+	 * Clears uploads if not authenticated.
+	 */
 	async refreshUploads() {
 		if (!auth.isAuthenticated || !auth.user) {
 			this.uploads = [];
@@ -135,63 +121,15 @@ class CloudStorageStore {
 		}
 	}
 
-	async refreshUserClips() {
-		try {
-			this.clipsLoading = true;
-			
-			// Get device ID if not cached
-			if (!this.deviceId) {
-				try {
-					this.deviceId = await invoke<string>('get_device_id');
-				} catch (err) {
-					console.warn('Could not get device ID:', err);
-				}
-			}
-
-			// Build query - fetch by user_id OR device_id
-			let query = auth.supabase
-				.from('clips')
-				.select('*')
-				.order('uploaded_at', { ascending: false });
-
-			if (auth.isAuthenticated && auth.user) {
-				// If authenticated, get clips by user_id or device_id
-				if (this.deviceId) {
-					query = query.or(`user_id.eq.${auth.user.id},device_id.eq.${this.deviceId}`);
-				} else {
-					query = query.eq('user_id', auth.user.id);
-				}
-			} else if (this.deviceId) {
-				// If not authenticated, only get by device_id
-				query = query.eq('device_id', this.deviceId);
-			} else {
-				// No way to identify user's clips
-				this.userClips = [];
-				return;
-			}
-
-			const { data, error } = await query;
-
-			if (error) throw error;
-
-			this.userClips = data || [];
-			console.log(`☁️ Loaded ${this.userClips.length} user clip(s) from cloud`);
-		} catch (err) {
-			console.error('Error fetching user clips:', err);
-		} finally {
-			this.clipsLoading = false;
-		}
-	}
-
-	// Refresh both uploads and clips
-	async refreshAll() {
-		await Promise.all([
-			this.refreshUploads(),
-			this.refreshUserClips(),
-		]);
-	}
-
-	async uploadVideo(videoPath: string, metadata?: any) {
+	/**
+	 * Upload a video to cloud storage.
+	 * Compresses the video, uploads to B2, and tracks progress.
+	 * @param videoPath - Local path to the video file
+	 * @param metadata - Optional metadata to store with the upload
+	 * @returns The created upload record
+	 * @throws Error if not authenticated or upload fails
+	 */
+	async uploadVideo(videoPath: string, metadata?: Record<string, unknown>) {
 		if (!auth.isAuthenticated || !auth.user) {
 			throw new Error('Must be authenticated to upload');
 		}
@@ -360,6 +298,10 @@ class CloudStorageStore {
 		}
 	}
 
+	/**
+	 * Cancel an in-progress upload.
+	 * @param id - Queue item ID to cancel
+	 */
 	cancelUpload(id: string) {
 		const queueItem = this.uploadQueue.find(item => item.id === id);
 		if (queueItem && queueItem.xhr) {
@@ -370,6 +312,12 @@ class CloudStorageStore {
 		}
 	}
 
+	/**
+	 * Download a video from cloud storage to local disk.
+	 * @param uploadId - ID of the upload to download
+	 * @param destPath - Local path to save the file
+	 * @throws Error if not authenticated or download fails
+	 */
 	async downloadVideo(uploadId: string, destPath: string) {
 		if (!auth.isAuthenticated || !auth.user) {
 			throw new Error('Must be authenticated to download');
@@ -407,6 +355,12 @@ class CloudStorageStore {
 		}
 	}
 
+	/**
+	 * Delete an upload from cloud storage.
+	 * Removes database record and updates storage quota.
+	 * @param uploadId - ID of the upload to delete
+	 * @throws Error if not authenticated or deletion fails
+	 */
 	async deleteUpload(uploadId: string) {
 		if (!auth.isAuthenticated || !auth.user) {
 			throw new Error('Must be authenticated to delete');
@@ -452,7 +406,15 @@ class CloudStorageStore {
 		}
 	}
 
-	async createPublicClip(videoPath: string, deviceId: string, metadata?: any): Promise<{ clip: Clip; alreadyExists: boolean }> {
+	/**
+	 * Create a public clip that can be shared via a short code.
+	 * Does not require authentication - uses device ID for tracking.
+	 * @param videoPath - Local path to the clip video
+	 * @param deviceId - Device identifier for anonymous uploads
+	 * @param metadata - Optional metadata to store with the clip
+	 * @returns The created clip record with share_code
+	 */
+	async createPublicClip(videoPath: string, deviceId: string, metadata?: Record<string, unknown>) {
 		try {
 			// Read file to get size
 			const fileBuffer = await readFile(videoPath);
@@ -520,6 +482,12 @@ class CloudStorageStore {
 		}
 	}
 
+	/**
+	 * Fetch a public clip by its share code.
+	 * @param shareCode - The short share code (e.g., "ABC123")
+	 * @returns The clip record if found
+	 * @throws Error if clip not found
+	 */
 	async getClipByCode(shareCode: string) {
 		try {
 			const { data, error } = await auth.supabase
@@ -537,6 +505,11 @@ class CloudStorageStore {
 		}
 	}
 
+	/**
+	 * Remove an item from the upload queue.
+	 * Cancels the upload if still in progress.
+	 * @param id - Queue item ID to remove
+	 */
 	removeFromQueue(id: string) {
 		const queueItem = this.uploadQueue.find(item => item.id === id);
 		// Cancel if still uploading
@@ -546,15 +519,18 @@ class CloudStorageStore {
 		this.uploadQueue = this.uploadQueue.filter(item => item.id !== id);
 	}
 
+	/** Clear all completed, errored, and cancelled items from the queue */
 	clearCompletedQueue() {
 		this.uploadQueue = this.uploadQueue.filter(
 			item => item.status !== 'completed' && item.status !== 'error' && item.status !== 'cancelled'
 		);
 	}
 	
+	/** Clear only errored items from the queue */
 	clearErrorQueue() {
 		this.uploadQueue = this.uploadQueue.filter(item => item.status !== 'error');
 	}
 }
 
+/** Singleton cloud storage store instance */
 export const cloudStorage = new CloudStorageStore();

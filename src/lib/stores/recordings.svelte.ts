@@ -1,3 +1,25 @@
+/**
+ * Recordings store for managing the list of recorded games.
+ * Handles fetching, selection, deletion, and manual recording controls.
+ * Also manages event listeners for auto-recording.
+ *
+ * @example
+ * // Bootstrap the store (sets up event listeners)
+ * onMount(() => {
+ *   const cleanup = recordingsStore.bootstrap();
+ *   return cleanup;
+ * });
+ *
+ * // Start/stop manual recording
+ * await recordingsStore.startManualRecording();
+ * await recordingsStore.stopManualRecording();
+ *
+ * // Access recordings
+ * recordingsStore.recordings.forEach(rec => console.log(rec.id));
+ *
+ * @module stores/recordings
+ */
+
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { RecordingSession, RecordingWithMetadata, GameEvent } from "$lib/types/recording";
@@ -6,17 +28,31 @@ import { recording } from "$lib/stores/recording.svelte";
 import { settings } from "$lib/stores/settings.svelte";
 import { clipsStore, type ClipSession } from "$lib/stores/clips.svelte";
 
+/**
+ * Manages the recordings list, selection state, and recording controls.
+ * Uses reference counting for bootstrap/teardown lifecycle.
+ */
 class RecordingsStore {
+	/** List of all recordings with metadata */
 	recordings = $state<RecordingWithMetadata[]>([]);
+	/** IDs of currently selected recordings */
 	selectedIds = $state<Set<string>>(new Set());
+	/** Whether recordings are being loaded */
 	isLoading = $state(false);
+	/** Last error message */
 	error = $state<string | null>(null);
+	/** Whether manual recording is starting */
 	isManualStarting = $state(false);
+	/** Whether manual recording is stopping */
 	isManualStopping = $state(false);
 
+	/** Whether event listeners are active */
 	private listenersActive = false;
+	/** Reference count for bootstrap calls */
 	private bootstrapRefCount = 0;
+	/** Promises for event listener cleanup */
 	private eventListenerPromises: Promise<() => void>[] = [];
+	/** Additional cleanup functions */
 	private extraCleanupFns: Array<() => void> = [];
 
 	constructor() {
@@ -24,7 +60,10 @@ class RecordingsStore {
 		this.recordings = [];
 	}
 
-	// Fetch recordings from backend
+	/**
+	 * Fetch recordings from the backend.
+	 * Updates the recordings list with fresh data.
+	 */
 	async refresh() {
 		this.isLoading = true;
 		this.error = null;
@@ -45,7 +84,10 @@ class RecordingsStore {
 		}
 	}
 
-	// Toggle selection for a recording
+	/**
+	 * Toggle selection state for a recording.
+	 * @param id - Recording ID to toggle
+	 */
 	toggleSelection(id: string) {
 		if (this.selectedIds.has(id)) {
 			this.selectedIds.delete(id);
@@ -55,33 +97,36 @@ class RecordingsStore {
 		this.selectedIds = new Set(this.selectedIds); // Trigger reactivity
 	}
 
-	// Select all recordings
+	/** Select all recordings */
 	selectAll() {
 		this.selectedIds = new Set(this.recordings.map((r) => r.id));
 	}
 
-	// Clear all selections
+	/** Clear all selections */
 	clearSelection() {
 		this.selectedIds.clear();
 		this.selectedIds = new Set(this.selectedIds); // Trigger reactivity
 	}
 
-	// Get count of selected recordings
+	/** Number of selected recordings */
 	get selectedCount() {
 		return this.selectedIds.size;
 	}
 
-	// Check if all recordings are selected
+	/** Whether all recordings are selected */
 	get allSelected() {
 		return this.recordings.length > 0 && this.selectedIds.size === this.recordings.length;
 	}
 
-	// Check if some (but not all) are selected
+	/** Whether some (but not all) recordings are selected */
 	get someSelected() {
 		return this.selectedIds.size > 0 && this.selectedIds.size < this.recordings.length;
 	}
 
-	// Delete selected recordings
+	/**
+	 * Delete all selected recordings.
+	 * Removes video and .slp files from disk.
+	 */
 	async deleteSelected() {
 		const idsToDelete = Array.from(this.selectedIds);
 		console.log("Deleting recordings:", idsToDelete);
@@ -106,36 +151,41 @@ class RecordingsStore {
 		}
 	}
 
-	// Get total storage used by all recordings
+	/** Total storage used by all recordings in bytes */
 	get totalStorage() {
 		return this.recordings.reduce((total, rec) => total + (rec.file_size || 0), 0);
 	}
 
-	// Get most played character
+	/** Character ID of the most played character, -1 if none */
 	get mostPlayedCharacter() {
-		const characterCounts = new Map<number, number>();
-		
+		const characterCounts: Record<number, number> = {};
+
 		this.recordings.forEach((rec) => {
 			if (rec.slippi_metadata) {
 				rec.slippi_metadata.characters.forEach((charId) => {
-					characterCounts.set(charId, (characterCounts.get(charId) || 0) + 1);
+					characterCounts[charId] = (characterCounts[charId] || 0) + 1;
 				});
 			}
 		});
 
 		let maxCount = 0;
 		let mostPlayed = -1;
-		
-		characterCounts.forEach((count, charId) => {
+
+		for (const [charIdStr, count] of Object.entries(characterCounts)) {
 			if (count > maxCount) {
 				maxCount = count;
-				mostPlayed = charId;
+				mostPlayed = parseInt(charIdStr, 10);
 			}
-		});
+		}
 
 		return mostPlayed;
 	}
 
+	/**
+	 * Bootstrap the store with event listeners.
+	 * Uses reference counting - call the returned cleanup function when done.
+	 * @returns Cleanup function to call on unmount
+	 */
 	bootstrap() {
 		this.bootstrapRefCount += 1;
 
@@ -153,6 +203,10 @@ class RecordingsStore {
 		};
 	}
 
+	/**
+	 * Start a manual recording (not auto-triggered by game detection).
+	 * Invokes the Tauri backend to begin screen capture.
+	 */
 	async startManualRecording() {
 		if (this.isManualStarting || recording.isRecording) {
 			return;
@@ -173,6 +227,10 @@ class RecordingsStore {
 		}
 	}
 
+	/**
+	 * Stop the current manual recording.
+	 * Processes any clip markers and refreshes the recordings list.
+	 */
 	async stopManualRecording() {
 		if (this.isManualStopping || !recording.isRecording) {
 			return;
@@ -193,6 +251,7 @@ class RecordingsStore {
 		}
 	}
 
+	/** Set up Tauri event listeners for recording state changes */
 	private setupRecordingListeners() {
 		invoke<string | null>("get_last_replay_path")
 			.then((path) => {
@@ -271,6 +330,7 @@ class RecordingsStore {
 		this.extraCleanupFns.push(() => document.removeEventListener("keydown", hotkeyHandler));
 	}
 
+	/** Clean up all event listeners */
 	private async teardownRecordingListeners() {
 		const unsubs = await Promise.allSettled(this.eventListenerPromises);
 		for (const result of unsubs) {
@@ -298,6 +358,7 @@ class RecordingsStore {
 		this.listenersActive = false;
 	}
 
+	/** Format a keyboard event into a hotkey string (e.g., "Ctrl+Shift+F9") */
 	private formatHotkey(event: KeyboardEvent): string {
 		const parts: string[] = [];
 		if (event.ctrlKey || event.metaKey) parts.push(event.metaKey ? "Cmd" : "Ctrl");
@@ -313,6 +374,7 @@ class RecordingsStore {
 		return parts.join("+");
 	}
 
+	/** Handle the create clip hotkey press */
 	private async handleCreateClip() {
 		if (!recording.isRecording || !recording.startTimestamp || !recording.currentReplayPath) {
 			handleTauriError(new Error("Can only create clips during active recording"), "Not recording");
@@ -331,7 +393,11 @@ class RecordingsStore {
 		}
 	}
 
-	// Get a clip recording by ID (ensures clips are loaded)
+	/**
+	 * Get a clip by ID, refreshing the clips list first.
+	 * @param id - Clip ID to find
+	 * @returns The clip session or undefined if not found
+	 */
 	async getClipRecording(id: string): Promise<ClipSession | undefined> {
 		// Always refresh to ensure we have latest clips
 		await clipsStore.refresh();
@@ -344,12 +410,20 @@ class RecordingsStore {
 		return clip;
 	}
 
-	// Get a Slippi recording by ID
+	/**
+	 * Get a recording by ID from the current list.
+	 * @param id - Recording ID to find
+	 * @returns The recording or undefined if not found
+	 */
 	getSlippiRecording(id: string): RecordingWithMetadata | undefined {
 		return this.recordings.find((r) => r.id === id);
 	}
 
-	// Load Slippi events from a .slp file
+	/**
+	 * Parse and load game events from a .slp file.
+	 * @param slpPath - Path to the .slp file
+	 * @returns Array of game events (deaths, etc.)
+	 */
 	async loadSlippiEvents(slpPath: string): Promise<GameEvent[]> {
 		try {
 			return await invoke<GameEvent[]>("parse_slp_events", { slpPath });
@@ -359,12 +433,16 @@ class RecordingsStore {
 		}
 	}
 
-	// Check if a recording/clip is clip-only (no Slippi metadata)
+	/**
+	 * Check if a recording is clip-only (no associated .slp file).
+	 * @param recording - Recording or clip to check
+	 * @returns True if the recording has no Slippi data
+	 */
 	isClipOnly(recording: ClipSession | RecordingWithMetadata | undefined): boolean {
 		return !recording?.slp_path;
 	}
 }
 
-// Export singleton instance
+/** Singleton recordings store instance */
 export const recordingsStore = new RecordingsStore();
 

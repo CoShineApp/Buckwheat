@@ -11,7 +11,7 @@
 	import HotkeySelector from "$lib/components/hotkey/HotkeySelector.svelte";
 	import { Folder, Gamepad2, Keyboard, Palette, FolderOpen, Database, Monitor, RefreshCw } from "@lucide/svelte";
 	import { onMount } from "svelte";
-	import { listGameWindows, getGameProcessName, setGameProcessName, captureWindowPreview, type GameWindow } from "$lib/commands.svelte";
+	import { listGameWindows, getGameProcessName, setGameProcessName, captureWindowPreview, type GameWindow } from "$lib/commands";
 	import { toast } from "svelte-sonner";
 
 	let settingsPath = $state<string>("");

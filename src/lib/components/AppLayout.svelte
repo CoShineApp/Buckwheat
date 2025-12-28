@@ -23,7 +23,7 @@
 	import AuthModal from "$lib/components/auth/AuthModal.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import { onMount, onDestroy } from "svelte";
-	import { checkGameWindow, listGameWindows, getGameProcessName, setGameProcessName } from "$lib/commands.svelte";
+	import { checkGameWindow, listGameWindows, getGameProcessName, setGameProcessName } from "$lib/commands";
 	import { invoke } from "@tauri-apps/api/core";
 	import { recordingsStore } from "$lib/stores/recordings.svelte";
 
@@ -279,16 +279,6 @@
 								<span>Clips</span>
 							</SidebarMenuButton>
 						</SidebarMenuItem>
-						<SidebarMenuItem>
-							<SidebarMenuButton 
-								tooltipContent="Settings" 
-								onclick={() => navigation.navigateTo("settings")}
-								isActive={navigation.currentPage === "settings"}
-							>
-								<Settings />
-								<span>Settings</span>
-							</SidebarMenuButton>
-						</SidebarMenuItem>
 						{#if auth.isAuthenticated}
 							<SidebarMenuItem>
 								<SidebarMenuButton 
@@ -301,6 +291,16 @@
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						{/if}
+						<SidebarMenuItem>
+							<SidebarMenuButton 
+								tooltipContent="Settings" 
+								onclick={() => navigation.navigateTo("settings")}
+								isActive={navigation.currentPage === "settings"}
+							>
+								<Settings />
+								<span>Settings</span>
+							</SidebarMenuButton>
+						</SidebarMenuItem>
 					</SidebarMenu>
 				</SidebarGroupContent>
 			</SidebarGroup>

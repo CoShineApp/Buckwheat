@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
 	import { recordingsStore } from "$lib/stores/recordings.svelte";
-	import { formatFileSize, getCharacterName } from "$lib/utils/characters";
+	import { getCharacterName } from "$lib/utils/characters";
+	import { formatFileSize } from "$lib/utils/format";
 	import CharacterIcon from "./CharacterIcon.svelte";
 	import { Video, HardDrive, Trophy, Clock } from "@lucide/svelte";
 

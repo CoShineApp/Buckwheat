@@ -4,7 +4,8 @@
 	import { clipsStore, type ClipSession } from '$lib/stores/clips.svelte';
 	import { cloudStorage } from '$lib/stores/cloud-storage.svelte';
 	import { navigation } from '$lib/stores/navigation.svelte';
-	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink, Cloud, Loader2 } from '@lucide/svelte';
+	import { formatDuration, formatFileSize } from '$lib/utils/format';
+	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { invoke, convertFileSrc } from '@tauri-apps/api/core';
@@ -130,22 +131,6 @@
 			console.error('Refresh error:', error);
 			toast.error('Failed to refresh clips');
 		}
-	}
-
-	function formatDuration(seconds: number | null): string {
-		if (!seconds) return 'Unknown';
-		const mins = Math.floor(seconds / 60);
-		const secs = seconds % 60;
-		return `${mins}:${secs.toString().padStart(2, '0')}`;
-	}
-
-	function formatFileSize(bytes: number | null): string {
-		if (!bytes) return 'Unknown';
-		const mb = bytes / 1024 / 1024;
-		if (mb < 1) {
-			return `${(bytes / 1024).toFixed(1)} KB`;
-		}
-		return `${mb.toFixed(1)} MB`;
 	}
 
 	function formatDate(dateString: string): string {
