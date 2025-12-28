@@ -8,6 +8,7 @@ use crate::commands::recording::{configure_target_window, resolve_recording_qual
 use crate::events::{game as game_events, recording as recording_events};
 use crate::game_detector::{slippi_paths, GameDetector};
 use crate::library;
+use crate::recorder;
 use std::path::PathBuf;
 use tauri::{Emitter, Listener, Manager, State};
 
@@ -130,13 +131,7 @@ pub async fn start_watching(
         let state_ref = app_clone2_inner.state::<AppState>();
         
         // Check if this is the file we're currently recording
-        // Extract the info we need while holding the lock, then release it
-        let should_stop = {
-            let current_file = match state_ref.current_recording_file.lock() {
-                Ok(f) => f,
-                Err(_) => return,
-            };
-            
+        if let Ok(current_file) = state_ref.current_recording_file.lock() {
             if let Some(recording_file) = current_file.as_ref() {
                 let modified_path_clean = modified_path.trim_matches('"');
                 
@@ -152,26 +147,23 @@ pub async fn start_watching(
                 
                 log::info!("Comparing base filenames: stored='{}' modified='{}'", stored_base, modified_base);
                 
-                stored_base == modified_base && !stored_base.is_empty()
-            } else {
-                false
-            }
-        };
-        
-        if should_stop {
-            log::info!("Detected modification of recording file - game ended!");
-            
-            // Wait for file write to complete, then stop recording
-            let app_handle = app_clone2_inner.clone();
-            tauri::async_runtime::spawn(async move {
-                log::info!("Waiting 3 seconds for file write to complete...");
-                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                
-                log::info!("Stopping recording after game end...");
-                if let Err(e) = stop_recording_internal(&app_handle).await {
-                    log::error!("Failed to stop recording: {:?}", e);
+                if stored_base == modified_base && !stored_base.is_empty() {
+                    log::info!("Detected modification of recording file - game ended!");
+                    drop(current_file);
+                    
+                    // Wait for file write to complete, then stop recording
+                    let app_handle = app_clone2_inner.clone();
+                    tauri::async_runtime::spawn(async move {
+                        log::info!("Waiting 3 seconds for file write to complete...");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                        
+                        log::info!("Stopping recording after game end...");
+                        if let Err(e) = stop_recording_internal(&app_handle).await {
+                            log::error!("Failed to stop recording: {:?}", e);
+                        }
+                    });
                 }
-            });
+            }
         }
     });
     

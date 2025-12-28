@@ -122,15 +122,22 @@ impl MacOSRecorder {
     fn initialize_stream(
         &mut self,
         output_path: &str,
-        _quality: super::RecordingQuality,
+        quality: super::RecordingQuality,
     ) -> Result<(), Error> {
-        // Note: macOS implementation uses VideoWriter which doesn't currently support
-        // configurable bitrate, but we accept the parameter for API consistency
         let window = self.find_dolphin_window()?;
         log::info!("🎮 Found game window: {}", window.title());
 
-        let (width, height) = Self::desired_dimensions(&window);
-        log::info!("🖥️  Capturing window at {}x{}", width, height);
+        let (source_width, source_height) = Self::desired_dimensions(&window);
+        
+        // Scale dimensions based on quality setting
+        let (width, height) = quality.scale_dimensions(source_width as u32, source_height as u32);
+        let width = width as i32;
+        let height = height as i32;
+        
+        log::info!(
+            "🖥️  Capture: {}x{} -> Output: {}x{} ({:?} quality)",
+            source_width, source_height, width, height, quality
+        );
 
         let filter = SCContentFilter::new().with_desktop_independent_window(&window);
         let config = SCStreamConfiguration::new()

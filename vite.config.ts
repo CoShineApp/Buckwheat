@@ -19,7 +19,15 @@ export default defineConfig({
 		hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
 		watch: {
 			ignored: ['**/src-tauri/**']
+		},
+		fs: {
+			// Prevent Vite from crawling into Rust build artifacts
+			deny: ['src-tauri/target']
 		}
+	},
+	// Exclude Rust build directory from dependency scanning
+	optimizeDeps: {
+		exclude: ['src-tauri']
 	},
 	envPrefix: ['VITE_', 'TAURI_ENV_*'],
 	build: {

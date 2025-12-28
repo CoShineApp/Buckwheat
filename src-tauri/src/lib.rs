@@ -1,22 +1,42 @@
 mod app_state;
 mod clip_processor;
 mod commands;
+mod events;
 mod game_detector;
+mod library;
 mod recorder;
 mod slippi;
+mod window_detector;
+
+// Clips commands
+use commands::clips::{
+    compress_video_for_upload, delete_temp_file, mark_clip_timestamp, process_clip_markers,
+};
+// Cloud commands
 use commands::cloud::get_device_id;
+// Default commands
 use commands::default::{read, write};
+// Library commands
+use commands::library::{
+    delete_recording, get_clips, get_recordings, open_file_location, open_recording_folder,
+    open_video,
+};
+// Recording commands
+use commands::recording::{start_generic_recording, start_recording, stop_recording};
+// Settings commands
 use commands::settings::{
     get_recording_directory, get_setting, get_settings_path, open_settings_folder,
 };
+// Slippi commands
 use commands::slippi::{
-    capture_window_preview, check_game_window, compress_video_for_upload, delete_recording,
-    delete_temp_file, get_clips, get_default_slippi_path, get_game_process_name,
-    get_last_replay_path, get_recordings, list_game_windows, mark_clip_timestamp,
-    open_file_location, open_recording_folder, open_video, parse_slp_events, process_clip_markers,
-    set_game_process_name, start_generic_recording, start_recording, start_watching,
-    stop_recording, stop_watching,
+    get_default_slippi_path, get_last_replay_path, parse_slp_events, start_watching, stop_watching,
 };
+// Window commands
+use commands::window::{
+    capture_window_preview, check_game_window, get_game_process_name, list_game_windows,
+    set_game_process_name,
+};
+
 use tauri::Manager;
 
 #[allow(clippy::missing_panics_doc)]

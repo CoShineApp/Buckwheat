@@ -492,13 +492,15 @@ impl Recorder for WindowsRecorder {
         self.ensure_output_dir(output_path)?;
 
         let target = self.find_target()?;
-        let (width, height) = self.get_target_size(&target)?;
+        let (source_width, source_height) = self.get_target_size(&target)?;
         
-        // Ensure even dimensions for H.264
-        let width = (width / 2) * 2;
-        let height = (height / 2) * 2;
+        // Scale dimensions based on quality setting
+        let (width, height) = quality.scale_dimensions(source_width, source_height);
 
-        info!("Capture dimensions: {}x{}", width, height);
+        info!(
+            "Capture: {}x{} -> Output: {}x{} ({:?} quality)",
+            source_width, source_height, width, height, quality
+        );
 
         // Check if audio should be enabled
         let enable_audio = resolve_audio_enabled();
