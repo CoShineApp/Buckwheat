@@ -1,6 +1,7 @@
 pub mod slippi_paths;
 
 use crate::commands::errors::Error;
+use crate::events::game as game_events;
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
@@ -62,11 +63,12 @@ impl GameDetector {
                                     if let Some(handle) = &app_handle {
                                         let path_string = path.to_string_lossy().to_string();
                                         log::info!(
-                                            "📤 Emitting slp-file-created event with path: {}",
+                                            "📤 Emitting {} event with path: {}",
+                                            game_events::FILE_CREATED,
                                             path_string
                                         );
 
-                                        match handle.emit("slp-file-created", path_string.clone()) {
+                                        match handle.emit(game_events::FILE_CREATED, path_string.clone()) {
                                             Ok(_) => log::info!("✅ Event emitted successfully"),
                                             Err(e) => log::error!(
                                                 "❌ Failed to emit slp-file-created event: {:?}",
@@ -96,10 +98,11 @@ impl GameDetector {
                                         log::debug!("📝 .slp file modified: {}", path_string);
 
                                         if let Err(e) =
-                                            handle.emit("slp-file-modified", path_string)
+                                            handle.emit(game_events::FILE_MODIFIED, path_string)
                                         {
                                             log::error!(
-                                                "❌ Failed to emit slp-file-modified event: {:?}",
+                                                "❌ Failed to emit {} event: {:?}",
+                                                game_events::FILE_MODIFIED,
                                                 e
                                             );
                                         }

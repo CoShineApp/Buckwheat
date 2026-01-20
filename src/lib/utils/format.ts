@@ -88,3 +88,24 @@ export function formatDuration(seconds: number | null | undefined): string {
 	return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+export function getLCancelPercent(success: number, fail: number): number | null {
+	const total = success + fail;
+	if (total === 0) return null;
+	return Math.round((success / total) * 100);
+}
+
+export function formatLCancelDisplay(success: number, fail: number): string {
+	const pct = getLCancelPercent(success, fail);
+	if (pct === null) return "-";
+	return `${pct}%`;
+}
+
+export function formatRatio(ratio: number | null | undefined): string {
+	if (ratio == null) return "-";
+	return `${Math.round(ratio * 100)}%`;
+}
+
+export function formatDecimal(num: number | null | undefined, decimals = 1): string {
+	if (num == null) return "-";
+	return num.toFixed(decimals);
+}

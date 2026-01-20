@@ -62,17 +62,33 @@ struct CaptureState {
 struct FrameHandler {
     encoder: Option<VideoEncoder>,
     state: Arc<Mutex<CaptureState>>,
+    /// Encoder initialization info (deferred until first frame)
+    encoder_config: Option<EncoderConfig>,
+}
+
+/// Configuration for deferred encoder creation
+#[cfg(all(target_os = "windows", feature = "real-recording"))]
+struct EncoderConfig {
+    output_path: String,
+    enable_audio: bool,
+    bitrate: u32,
 }
 
 /// Flags passed to the frame handler
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 struct CaptureFlags {
+    /// Target width (used as fallback if use_frame_dimensions is false)
     width: u32,
+    /// Target height (used as fallback if use_frame_dimensions is false)
     height: u32,
     output_path: String,
     enable_audio: bool,
     bitrate: u32,
     state: Arc<Mutex<CaptureState>>,
+    /// When true, defers encoder creation until the first frame arrives and uses
+    /// the actual frame dimensions. This is REQUIRED to avoid cropping issues
+    /// caused by DPI scaling mismatches between window.rect() and captured frames.
+    use_frame_dimensions: bool,
 }
 
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
@@ -83,43 +99,61 @@ impl GraphicsCaptureApiHandler for FrameHandler {
     fn new(ctx: Context<Self::Flags>) -> Result<Self, Self::Error> {
         let flags = ctx.flags;
         
-        info!(
-            "Initializing VideoEncoder: {}x{}, codec: H.264, audio: {}, bitrate: {} Mbps",
-            flags.width, flags.height,
-            if flags.enable_audio { "enabled (cpal)" } else { "disabled" },
-            flags.bitrate / 1_000_000
-        );
-
-        // Build video settings - use H.264 for universal playback (HEVC requires paid codec on Windows)
-        let video_settings = VideoSettingsBuilder::new(flags.width, flags.height)
-            .sub_type(VideoSettingsSubType::H264)
-            .bitrate(flags.bitrate);
-
-        // Build audio settings - we'll provide audio via send_audio_buffer()
-        let audio_settings = if flags.enable_audio {
-            AudioSettingsBuilder::default()
-                .sample_rate(AUDIO_SAMPLE_RATE)
-                .channel_count(AUDIO_CHANNELS)
-                .bit_per_sample(AUDIO_BITS_PER_SAMPLE)
-                .disabled(false)
+        if flags.use_frame_dimensions {
+            // Defer encoder creation until first frame when we know actual dimensions
+            info!(
+                "🎥 Encoder creation deferred - will use actual frame dimensions (target: {}x{}, {} Mbps)",
+                flags.width, flags.height,
+                flags.bitrate / 1_000_000
+            );
+            
+            Ok(Self {
+                encoder: None,
+                state: flags.state,
+                encoder_config: Some(EncoderConfig {
+                    output_path: flags.output_path,
+                    enable_audio: flags.enable_audio,
+                    bitrate: flags.bitrate,
+                }),
+            })
         } else {
-            AudioSettingsBuilder::default().disabled(true)
-        };
+            // Create encoder immediately with specified dimensions
+            warn!(
+                "🎥 ENCODER DIMENSIONS: {}x{} (H.264, {} Mbps, audio: {})",
+                flags.width, flags.height,
+                flags.bitrate / 1_000_000,
+                if flags.enable_audio { "ON" } else { "OFF" }
+            );
 
-        // Create the encoder
-        let encoder = VideoEncoder::new(
-            video_settings,
-            audio_settings,
-            ContainerSettingsBuilder::default(),
-            &flags.output_path,
-        )?;
+            let video_settings = VideoSettingsBuilder::new(flags.width, flags.height)
+                .sub_type(VideoSettingsSubType::H264)
+                .bitrate(flags.bitrate);
 
-        info!("VideoEncoder initialized successfully");
+            let audio_settings = if flags.enable_audio {
+                AudioSettingsBuilder::default()
+                    .sample_rate(AUDIO_SAMPLE_RATE)
+                    .channel_count(AUDIO_CHANNELS)
+                    .bit_per_sample(AUDIO_BITS_PER_SAMPLE)
+                    .disabled(false)
+            } else {
+                AudioSettingsBuilder::default().disabled(true)
+            };
 
-        Ok(Self {
-            encoder: Some(encoder),
-            state: flags.state,
-        })
+            let encoder = VideoEncoder::new(
+                video_settings,
+                audio_settings,
+                ContainerSettingsBuilder::default(),
+                &flags.output_path,
+            )?;
+
+            info!("VideoEncoder initialized successfully");
+
+            Ok(Self {
+                encoder: Some(encoder),
+                state: flags.state,
+                encoder_config: None,
+            })
+        }
     }
 
     fn on_frame_arrived(
@@ -144,7 +178,54 @@ impl GraphicsCaptureApiHandler for FrameHandler {
         let is_first_frame = state.start_time.is_none();
         if is_first_frame {
             state.start_time = Some(Instant::now());
-            info!("First frame received, recording started");
+            
+            // Log the actual captured frame dimensions
+            let frame_width = frame.width();
+            let frame_height = frame.height();
+            info!("🎬 First frame received!");
+            info!("📐 ACTUAL FRAME DIMENSIONS: {}x{}", frame_width, frame_height);
+            
+            // Create encoder with actual frame dimensions if deferred
+            if self.encoder.is_none() {
+                if let Some(config) = self.encoder_config.take() {
+                    warn!(
+                        "🎥 Creating encoder with ACTUAL frame size: {}x{} (H.264, {} Mbps)",
+                        frame_width, frame_height,
+                        config.bitrate / 1_000_000
+                    );
+                    
+                    let video_settings = VideoSettingsBuilder::new(frame_width, frame_height)
+                        .sub_type(VideoSettingsSubType::H264)
+                        .bitrate(config.bitrate);
+                    
+                    let audio_settings = if config.enable_audio {
+                        AudioSettingsBuilder::default()
+                            .sample_rate(AUDIO_SAMPLE_RATE)
+                            .channel_count(AUDIO_CHANNELS)
+                            .bit_per_sample(AUDIO_BITS_PER_SAMPLE)
+                            .disabled(false)
+                    } else {
+                        AudioSettingsBuilder::default().disabled(true)
+                    };
+                    
+                    match VideoEncoder::new(
+                        video_settings,
+                        audio_settings,
+                        ContainerSettingsBuilder::default(),
+                        &config.output_path,
+                    ) {
+                        Ok(encoder) => {
+                            self.encoder = Some(encoder);
+                            info!("✅ VideoEncoder created successfully with frame dimensions");
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to create encoder: {}", e);
+                            capture_control.stop();
+                            return Ok(());
+                        }
+                    }
+                }
+            }
             
             // Discard any audio buffered before first frame to sync A/V
             if let Some(ref receiver) = state.audio_receiver {
@@ -334,6 +415,33 @@ enum CaptureTarget {
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 type WindowCaptureControl = CaptureControl<FrameHandler, Box<dyn std::error::Error + Send + Sync>>;
 
+/// Get the DPI scale factor for a window.
+/// Windows capture uses physical pixels, but window.rect() returns logical pixels.
+/// This function returns the scale factor to convert from logical to physical.
+#[cfg(all(target_os = "windows", feature = "real-recording"))]
+fn get_window_dpi_scale(window: &Window) -> f64 {
+    use windows::Win32::UI::HiDpi::{GetDpiForWindow, GetDpiForSystem};
+    
+    // Try to get the window's DPI using the raw HWND pointer
+    let hwnd_ptr = window.as_raw_hwnd();
+    if !hwnd_ptr.is_null() {
+        let hwnd = windows::Win32::Foundation::HWND(hwnd_ptr);
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        if dpi > 0 {
+            return dpi as f64 / 96.0;
+        }
+    }
+    
+    // Fallback to system DPI
+    let system_dpi = unsafe { GetDpiForSystem() };
+    if system_dpi > 0 {
+        return system_dpi as f64 / 96.0;
+    }
+    
+    // Default to no scaling
+    1.0
+}
+
 #[cfg(all(target_os = "windows", feature = "real-recording"))]
 pub struct WindowsRecorder {
     capture_control: Option<WindowCaptureControl>,
@@ -423,11 +531,27 @@ impl WindowsRecorder {
     fn get_target_size(&self, target: &CaptureTarget) -> Result<(u32, u32), Error> {
         match target {
             CaptureTarget::Window(window) => {
+                // Use DwmGetWindowAttribute to get the actual capture dimensions
+                // This accounts for DPI scaling properly
                 let rect = window.rect()
                     .map_err(|e| Error::RecordingFailed(format!("Failed to get window rect: {}", e)))?;
-                let w = (rect.right - rect.left).max(640) as u32;
-                let h = (rect.bottom - rect.top).max(480) as u32;
-                Ok((w, h))
+                
+                let logical_w = (rect.right - rect.left).max(640) as u32;
+                let logical_h = (rect.bottom - rect.top).max(480) as u32;
+                
+                // Get DPI scale factor for the window
+                let dpi_scale = get_window_dpi_scale(window);
+                
+                // Calculate physical (capture) dimensions
+                let physical_w = ((logical_w as f64 * dpi_scale) as u32 / 2) * 2; // Ensure even
+                let physical_h = ((logical_h as f64 * dpi_scale) as u32 / 2) * 2;
+                
+                info!(
+                    "Window size: {}x{} logical, {}x{} physical (DPI scale: {:.2})",
+                    logical_w, logical_h, physical_w, physical_h, dpi_scale
+                );
+                
+                Ok((physical_w.max(640), physical_h.max(480)))
             }
             CaptureTarget::Monitor(monitor) => {
                 let w = monitor.width().unwrap_or(1920);
@@ -492,13 +616,15 @@ impl Recorder for WindowsRecorder {
         self.ensure_output_dir(output_path)?;
 
         let target = self.find_target()?;
-        let (width, height) = self.get_target_size(&target)?;
+        let (source_width, source_height) = self.get_target_size(&target)?;
         
-        // Ensure even dimensions for H.264
-        let width = (width / 2) * 2;
-        let height = (height / 2) * 2;
+        // Scale dimensions based on quality setting
+        let (width, height) = quality.scale_dimensions(source_width, source_height);
 
-        info!("Capture dimensions: {}x{}", width, height);
+        info!(
+            "Capture: {}x{} -> Output: {}x{} ({:?} quality)",
+            source_width, source_height, width, height, quality
+        );
 
         // Check if audio should be enabled
         let enable_audio = resolve_audio_enabled();
@@ -529,6 +655,20 @@ impl Recorder for WindowsRecorder {
         }));
 
         // Create flags for the capture handler
+        //
+        // ⚠️ CRITICAL: use_frame_dimensions MUST be true!
+        // 
+        // The Windows Graphics Capture API captures at LOGICAL pixel dimensions,
+        // but window.rect() may return different values due to DPI scaling quirks.
+        // If the encoder is configured with dimensions that don't match the actual
+        // captured frames, the video will be CROPPED to the top-left portion only!
+        //
+        // Solution: Defer encoder creation until the first frame arrives, then use
+        // frame.width()/height() to get the ACTUAL capture dimensions. This ensures
+        // the encoder always matches the captured content exactly.
+        //
+        // See: https://github.com/user/peppi/issues/XXX (recording cropped on high-DPI displays)
+        //
         let flags = CaptureFlags {
             width,
             height,
@@ -536,6 +676,7 @@ impl Recorder for WindowsRecorder {
             enable_audio: self.audio_capture.is_some(),
             bitrate: quality.bitrate(),
             state: capture_state.clone(),
+            use_frame_dimensions: true,
         };
 
         // Start capture

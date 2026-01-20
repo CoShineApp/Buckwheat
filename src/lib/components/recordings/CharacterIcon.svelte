@@ -5,7 +5,7 @@
 
 	interface Props {
 		characterId: CharacterId | number;
-		size?: "sm" | "md" | "lg";
+		size?: "sm" | "md" | "lg" | "xl";
 		colorIndex?: number;
 	}
 
@@ -19,6 +19,7 @@
 		sm: "size-8",
 		md: "size-12",
 		lg: "size-16",
+		xl: "size-20",
 	};
 
 	const sizeClass = $derived(sizeClasses[size]);

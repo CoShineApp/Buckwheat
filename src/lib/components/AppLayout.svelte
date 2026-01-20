@@ -14,7 +14,7 @@
 		SidebarProvider,
 		SidebarTrigger
 	} from "$lib/components/ui/sidebar";
-	import { Home, Settings, Moon, Sun, Circle, Cloud, LogIn, User, Scissors, Square, Loader2 } from "@lucide/svelte";
+	import { Home, Settings, Moon, Sun, Circle, Cloud, LogIn, User, Scissors, Square, Loader2, BarChart } from "@lucide/svelte";
 	import type { Snippet } from "svelte";
 	import { navigation } from "$lib/stores/navigation.svelte";
 	import { settings } from "$lib/stores/settings.svelte";
@@ -277,6 +277,16 @@
 							>
 								<Scissors />
 								<span>Clips</span>
+							</SidebarMenuButton>
+						</SidebarMenuItem>
+						<SidebarMenuItem>
+							<SidebarMenuButton 
+								tooltipContent="Total Stats" 
+								onclick={() => navigation.navigateTo("total_stats")}
+								isActive={navigation.currentPage === "total_stats"}
+							>
+								<BarChart />
+								<span>Total Stats</span>
 							</SidebarMenuButton>
 						</SidebarMenuItem>
 						{#if auth.isAuthenticated}

@@ -27,10 +27,15 @@ impl Recorder for MockRecorder {
             return Err(Error::RecordingFailed("Already recording".to_string()));
         }
 
+        let resolution_info = quality
+            .target_resolution()
+            .map(|(w, h)| format!("{}x{}", w, h))
+            .unwrap_or_else(|| "native".to_string());
         println!(
-            "🎥 [MOCK] Starting recording to: {} with {:?} quality (bitrate: {} Mbps)",
+            "🎥 [MOCK] Starting recording to: {} with {:?} quality ({}, {} Mbps)",
             output_path,
             quality,
+            resolution_info,
             quality.bitrate() / 1_000_000
         );
         self.is_recording = true;
