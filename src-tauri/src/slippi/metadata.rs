@@ -16,15 +16,44 @@ pub fn extract_metadata(game: &Game) -> SlippiMetadata {
         .and_then(|p| p.as_object());
     
     // Get winner from end game data
+    // In peppi/Slippi, the EndPlayer::placement field represents elimination order:
+    // - placement 0 = eliminated first (LOSER in 1v1)
+    // - placement 1 = eliminated second / last standing (WINNER in 1v1)
+    // So we want the player with the HIGHEST placement (last to be eliminated = winner)
     let winner_port = game
         .end
         .as_ref()
-        .and_then(|end| end.players.as_ref())
-        .and_then(|end_players| {
-            end_players
+        .and_then(|end| {
+            let players = end.players.as_ref()?;
+            
+            // Debug: log placements for troubleshooting
+            for p in players.iter() {
+                log::info!(
+                    "End player: port={}, placement={}",
+                    u8::from(p.port),
+                    p.placement
+                );
+            }
+            
+            // If there's an LRAS initiator (person who quit), the other player wins
+            if let Some(lras_port) = end.lras_initiator.flatten() {
+                log::info!("LRAS initiator detected on port {:?}", lras_port);
+                return players
+                    .iter()
+                    .find(|p| p.port != lras_port)
+                    .map(|p| u8::from(p.port));
+            }
+            
+            // In a 1v1, the winner is the one who was eliminated LAST (highest placement)
+            // placement 0 = first eliminated = loser
+            // placement 1 = last standing = winner
+            let winner = players
                 .iter()
-                .find(|p| p.placement == 0)
-                .map(|p| u8::from(p.port))
+                .max_by_key(|p| p.placement)
+                .map(|p| u8::from(p.port));
+            
+            log::info!("Winner determined by max placement: {:?}", winner);
+            winner
         });
     
     // Iterate through players

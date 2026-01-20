@@ -2,8 +2,10 @@
 	import type { SlippiMetadata } from '$lib/types/recording';
 	import { getStageName } from '$lib/utils/characters';
 	import CharacterIcon from '../recordings/CharacterIcon.svelte';
+	import StageIcon from '../recordings/StageIcon.svelte';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Crown } from '@lucide/svelte';
 
 	let { metadata }: { metadata: SlippiMetadata | null } = $props();
 </script>
@@ -35,7 +37,7 @@
 							<div class="text-xs text-muted-foreground">Port {player.port}</div>
 						</div>
 						{#if isWinner}
-							<div class="text-xs font-bold text-green-600 dark:text-green-400">WINNER</div>
+							<Crown class="size-4 text-yellow-500 fill-yellow-500/30" />
 						{/if}
 					</div>
 				{/each}
@@ -45,9 +47,12 @@
 
 			<!-- Game Info -->
 			<div class="space-y-2 text-sm">
-				<div class="flex justify-between">
+				<div class="flex items-center justify-between">
 					<span class="text-muted-foreground">Stage</span>
-					<span class="font-medium">{getStageName(metadata.stage)}</span>
+					<div class="flex items-center gap-2">
+						<StageIcon stageId={metadata.stage} size="sm" />
+						<span class="font-medium">{getStageName(metadata.stage)}</span>
+					</div>
 				</div>
 				<div class="flex justify-between">
 					<span class="text-muted-foreground">Duration</span>

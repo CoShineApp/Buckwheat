@@ -14,9 +14,11 @@ pub use recordings::{
     upsert_game_stats, get_game_stats_by_id,
     // Player stats operations
     upsert_player_stats, get_player_stats_by_recording, get_aggregated_player_stats,
+    // Filter options
+    get_available_filter_options,
     // Types
     RecordingRow, GameStatsRow, RecordingWithStats, PlayerStatsRow,
-    AggregatedPlayerStats, StatsFilter,
+    AggregatedPlayerStats, StatsFilter, AvailableFilterOptions,
 };
 
 use rusqlite::Connection;

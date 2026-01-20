@@ -11,7 +11,8 @@ mod window_detector;
 
 // Clips commands
 use commands::clips::{
-    compress_video_for_upload, delete_temp_file, mark_clip_timestamp, process_clip_markers,
+    apply_video_edit, compress_video_for_upload, create_clip_from_range, delete_temp_file,
+    mark_clip_timestamp, process_clip_markers,
 };
 // Cloud commands
 use commands::cloud::get_device_id;
@@ -20,8 +21,8 @@ use commands::default::{read, write};
 // Library commands
 use commands::library::{
     delete_recording, get_clips, get_player_stats, get_recordings, get_total_player_stats,
-    open_file_location, open_recording_folder, open_video, refresh_recordings_cache,
-    save_computed_stats,
+    get_available_filter_options, open_file_location, open_recording_folder, open_video, 
+    refresh_recordings_cache, save_computed_stats,
 };
 // Recording commands
 use commands::recording::{start_generic_recording, start_recording, stop_recording};
@@ -116,6 +117,8 @@ pub fn run() {
             mark_clip_timestamp,
             process_clip_markers,
             get_clips,
+            apply_video_edit,
+            create_clip_from_range,
             // Cloud commands
             compress_video_for_upload,
             delete_temp_file,
@@ -124,6 +127,7 @@ pub fn run() {
             save_computed_stats,
             get_player_stats,
             get_total_player_stats,
+            get_available_filter_options,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

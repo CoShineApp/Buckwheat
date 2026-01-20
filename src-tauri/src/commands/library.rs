@@ -4,7 +4,7 @@
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::database::{self, RecordingWithStats, AggregatedPlayerStats, StatsFilter};
+use crate::database::{self, RecordingWithStats, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions};
 use crate::slippi::{PlayerInfo, RecordingSession, SlippiMetadata};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -212,12 +212,14 @@ pub async fn save_computed_stats(
     // Update game_stats with match info
     if let Ok(Some(_existing)) = database::get_game_stats_by_id(&conn, &stats.recording_id) {
         // Update existing game stats with new match info columns
+        // Note: We intentionally do NOT update winner_port/loser_port here.
+        // The initial sync from Rust/peppi sets these correctly. Overwriting them
+        // from frontend slippi-js parsing caused race conditions and inconsistencies.
         conn.execute(
             "UPDATE game_stats SET 
                 match_id = ?, game_number = ?, game_end_method = ?,
                 stage = ?, game_duration = ?, total_frames = ?,
-                is_pal = ?, played_on = ?,
-                winner_port = ?, loser_port = ?
+                is_pal = ?, played_on = ?
             WHERE id = ?",
             rusqlite::params![
                 stats.match_id,
@@ -228,8 +230,6 @@ pub async fn save_computed_stats(
                 stats.total_frames,
                 stats.is_pal as i32,
                 stats.played_on,
-                stats.winner_index.map(|i| stats.players.iter().find(|p| p.player_index == i).map(|p| p.port)).flatten(),
-                stats.loser_index.map(|i| stats.players.iter().find(|p| p.player_index == i).map(|p| p.port)).flatten(),
                 stats.recording_id,
             ],
         ).map_err(|e| Error::RecordingFailed(format!("Failed to update game stats: {}", e)))?;
@@ -328,6 +328,18 @@ pub async fn get_total_player_stats(
     
     database::get_aggregated_player_stats(&conn, &connect_code, filter)
         .map_err(|e| Error::RecordingFailed(format!("Failed to get aggregated stats: {}", e)))
+}
+
+/// Get available filter options (connect codes, characters, stages) from the database
+#[tauri::command]
+pub async fn get_available_filter_options(
+    state: State<'_, AppState>,
+) -> Result<AvailableFilterOptions, Error> {
+    let db = state.database.clone();
+    let conn = db.connection();
+    
+    database::get_available_filter_options(&conn)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get filter options: {}", e)))
 }
 
 /// Open a video file in the default player

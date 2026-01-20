@@ -716,3 +716,51 @@ pub fn get_aggregated_player_stats(
         stage_stats,
     })
 }
+
+/// Available filter options for stats page (only values that exist in the database)
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableFilterOptions {
+    /// All unique connect codes in the database
+    pub connect_codes: Vec<String>,
+    /// All character IDs that players have played as
+    pub player_characters: Vec<i32>,
+    /// All character IDs that opponents have played as
+    pub opponent_characters: Vec<i32>,
+    /// All stage IDs that games have been played on
+    pub stages: Vec<i32>,
+}
+
+/// Get all available filter options from the database
+pub fn get_available_filter_options(conn: &Connection) -> rusqlite::Result<AvailableFilterOptions> {
+    // Get all unique connect codes
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT connect_code FROM player_stats WHERE connect_code IS NOT NULL ORDER BY connect_code"
+    )?;
+    let connect_codes: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get all unique character IDs (both player and opponent - same pool for now)
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT character_id FROM player_stats ORDER BY character_id"
+    )?;
+    let characters: Vec<i32> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get all unique stage IDs
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT stage FROM game_stats WHERE stage IS NOT NULL ORDER BY stage"
+    )?;
+    let stages: Vec<i32> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(AvailableFilterOptions {
+        connect_codes,
+        player_characters: characters.clone(),
+        opponent_characters: characters,
+        stages,
+    })
+}
