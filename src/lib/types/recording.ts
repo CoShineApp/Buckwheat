@@ -127,6 +127,23 @@ export interface RecordingWithMetadata extends RecordingSession {
 }
 
 /**
+ * Paginated response from get_recordings command.
+ * Backend now returns recordings in pages for better performance.
+ */
+export interface PaginatedRecordings {
+	/** Array of recordings for the current page */
+	recordings: RecordingSession[];
+	/** Total number of recordings across all pages */
+	total: number;
+	/** Current page number (1-indexed) */
+	page: number;
+	/** Number of recordings per page */
+	per_page: number;
+	/** Total number of pages */
+	total_pages: number;
+}
+
+/**
  * Types of events that can occur during a game.
  * Used for timeline markers in the replay viewer.
  */

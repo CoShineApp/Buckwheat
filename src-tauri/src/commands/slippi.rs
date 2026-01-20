@@ -161,6 +161,12 @@ pub async fn start_watching(
         if should_stop {
             log::info!("Detected modification of recording file - game ended!");
             
+            // Clear current_recording_file immediately to prevent duplicate stop attempts
+            // (file watcher can emit multiple events for a single file change)
+            if let Ok(mut current_file) = state_ref.current_recording_file.lock() {
+                *current_file = None;
+            }
+            
             // Wait for file write to complete, then stop recording
             let app_handle = app_clone2_inner.clone();
             tauri::async_runtime::spawn(async move {
@@ -169,7 +175,8 @@ pub async fn start_watching(
                 
                 log::info!("Stopping recording after game end...");
                 if let Err(e) = stop_recording_internal(&app_handle).await {
-                    log::error!("Failed to stop recording: {:?}", e);
+                    // This is expected if already stopped, only log at debug level
+                    log::debug!("Stop recording result: {:?}", e);
                 }
             });
         }
@@ -254,8 +261,11 @@ async fn stop_recording_internal(app: &tauri::AppHandle) -> Result<(), Error> {
         }
         
         // Emit event to frontend
-        if let Err(e) = app.emit(recording_events::STOPPED, output_path) {
+        log::info!("[SlippiStats] Emitting recording-stopped event with path: {}", output_path);
+        if let Err(e) = app.emit(recording_events::STOPPED, &output_path) {
             log::error!("Failed to emit {} event: {:?}", recording_events::STOPPED, e);
+        } else {
+            log::info!("[SlippiStats] Event emitted successfully");
         }
         
         Ok(())

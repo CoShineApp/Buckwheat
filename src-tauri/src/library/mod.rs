@@ -4,7 +4,9 @@
 //! and their associated Slippi replay files.
 
 mod recordings;
+mod sync;
 mod thumbnails;
 
-pub use recordings::{create_recording_session, get_recording_directory, scan_recordings};
+pub use recordings::get_recording_directory;
+pub use sync::sync_recordings_cache;
 

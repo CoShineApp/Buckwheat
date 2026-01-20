@@ -9,6 +9,9 @@
  * // Navigate to replay viewer
  * navigation.navigateToReplay('recording-123');
  *
+ * // Navigate to stats page
+ * navigation.navigateToStats('recording-123');
+ *
  * // Check current page
  * if (navigation.currentPage === 'settings') {
  *   // Show settings
@@ -18,14 +21,18 @@
  */
 
 /** Available page identifiers */
-type Page = "home" | "settings" | "replay" | "cloud" | "profile" | "clips";
+type Page = "home" | "settings" | "replay" | "cloud" | "profile" | "clips" | "stats" | "total_stats";
 
-/** Page state with type-safe replay info */
+/** Page state with type-safe replay/stats info */
 type PageInfo<TPage extends Page = Page> = TPage extends "replay"
-	? { page: "replay"; replay: { id: string; isClip?: boolean } }
+	? { page: "replay"; replay: { id: string; isClip?: boolean }; stats?: undefined }
+	: TPage extends "stats"
+	? { page: "stats"; stats: { recordingId: string }; replay?: undefined }
 	: TPage extends "clips"
-	? { page: "clips"; replay?: undefined }
-	: { page: Exclude<Page, "replay" | "clips">; replay?: undefined };
+	? { page: "clips"; replay?: undefined; stats?: undefined }
+	: TPage extends "total_stats"
+	? { page: "total_stats"; replay?: undefined; stats?: undefined }
+	: { page: Exclude<Page, "replay" | "clips" | "stats" | "total_stats">; replay?: undefined; stats?: undefined };
 
 /**
  * Manages navigation state for the single-page application.
@@ -55,12 +62,17 @@ class NavigationStore {
 		return this._state.page === "replay" ? Boolean(this._state.replay.isClip) : false;
 	}
 
+	/** Current stats recording ID when on stats page, null otherwise */
+	get statsRecordingId(): string | null {
+		return this._state.page === "stats" ? this._state.stats.recordingId : null;
+	}
+
 	/**
-	 * Navigate to a standard page (not replay or clips).
+	 * Navigate to a standard page (not replay, clips, or stats).
 	 * @param page - Target page identifier
 	 */
-	navigateTo(page: Exclude<Page, "replay" | "clips">): void {
-		this._state = { page };
+	navigateTo(page: Exclude<Page, "replay" | "clips" | "stats" | "total_stats"> | "total_stats"): void {
+		this._state = { page } as PageInfo; // Cast needed due to complex type union
 	}
 
 	/**
@@ -86,6 +98,19 @@ class NavigationStore {
 		this._state = { page: "clips" };
 	}
 
+	/**
+	 * Navigate to the stats page for a recording.
+	 * @param recordingId - Recording ID to view stats for
+	 */
+	navigateToStats(recordingId: string): void {
+		this._state = { page: "stats", stats: { recordingId } };
+	}
+
+	/** Navigate to the total stats page */
+	navigateToTotalStats(): void {
+		this._state = { page: "total_stats" };
+	}
+
 	/** Navigate back to the home page */
 	navigateBack(): void {
 		this._state = { page: "home" };
@@ -94,4 +119,3 @@ class NavigationStore {
 
 /** Singleton navigation store instance */
 export const navigation = new NavigationStore();
-

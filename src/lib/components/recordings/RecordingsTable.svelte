@@ -14,16 +14,21 @@
 	import { getStageName } from "$lib/utils/characters";
 	import { formatRelativeTime, formatFileSize } from "$lib/utils/format";
 	import CharacterIcon from "./CharacterIcon.svelte";
-	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2 } from "@lucide/svelte";
+	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2, ChevronLeft, ChevronRight, BarChart3 } from "@lucide/svelte";
 	import { invoke } from "@tauri-apps/api/core";
 	import { handleTauriError, showSuccess } from "$lib/utils/errors";
 	import { navigation } from "$lib/stores/navigation.svelte";
 	import { cloudStorage } from "$lib/stores/cloud-storage.svelte";
 	import { auth } from "$lib/stores/auth.svelte";
 	import { toast } from "svelte-sonner";
+	import type { RecordingWithMetadata } from "$lib/types/recording";
 
 	let isRefreshing = $state(false);
 	let uploadingRecordings = $state(new Set<string>());
+
+	function openStatsPage(recordingId: string) {
+		navigation.navigateToStats(recordingId);
+	}
 
 	async function refreshRecordings() {
 		isRefreshing = true;
@@ -120,7 +125,11 @@
 			<div>
 				<CardTitle>Recordings</CardTitle>
 				<CardDescription>
-					{recordingsStore.recordings.length} total recordings
+					{#if recordingsStore.totalRecordings > 0}
+						Showing {((recordingsStore.currentPage - 1) * recordingsStore.perPage) + 1}–{Math.min(recordingsStore.currentPage * recordingsStore.perPage, recordingsStore.totalRecordings)} of {recordingsStore.totalRecordings} recordings
+					{:else}
+						No recordings
+					{/if}
 				</CardDescription>
 			</div>
 			<Button
@@ -259,6 +268,15 @@
 										<Button
 											variant="ghost"
 											size="sm"
+											onclick={() => openStatsPage(recording.id)}
+											title="View game stats"
+											disabled={!recording.slp_path}
+										>
+											<BarChart3 class="size-4 text-primary" />
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
 											onclick={() => handlePlayVideo(recording.id)}
 											title="Watch replay"
 										>
@@ -300,6 +318,61 @@
 					</TableBody>
 				</Table>
 			</div>
+
+			<!-- Pagination Controls -->
+			{#if recordingsStore.totalPages > 1}
+				<div class="mt-4 flex items-center justify-between px-2">
+					<div class="text-sm text-muted-foreground">
+						Page {recordingsStore.currentPage} of {recordingsStore.totalPages}
+					</div>
+					<div class="flex items-center gap-2">
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => recordingsStore.prevPage()}
+							disabled={!recordingsStore.hasPrevPage || recordingsStore.isLoading}
+						>
+							<ChevronLeft class="size-4" />
+							Previous
+						</Button>
+						
+						<!-- Page number buttons (show up to 5 pages) -->
+						<div class="flex gap-1">
+							{#each Array.from({ length: Math.min(5, recordingsStore.totalPages) }, (_, i) => {
+								const totalPages = recordingsStore.totalPages;
+								const currentPage = recordingsStore.currentPage;
+								
+								// Calculate which pages to show
+								let startPage = Math.max(1, currentPage - 2);
+								const endPage = Math.min(totalPages, startPage + 4);
+								startPage = Math.max(1, endPage - 4);
+								
+								return startPage + i;
+							}).filter(page => page <= recordingsStore.totalPages) as page}
+								<Button
+									variant={page === recordingsStore.currentPage ? "default" : "outline"}
+									size="sm"
+									class="w-9"
+									onclick={() => recordingsStore.goToPage(page)}
+									disabled={recordingsStore.isLoading}
+								>
+									{page}
+								</Button>
+							{/each}
+						</div>
+						
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => recordingsStore.nextPage()}
+							disabled={!recordingsStore.hasNextPage || recordingsStore.isLoading}
+						>
+							Next
+							<ChevronRight class="size-4" />
+						</Button>
+					</div>
+				</div>
+			{/if}
 		{/if}
 	</CardContent>
 </Card>

@@ -1,6 +1,7 @@
 mod app_state;
 mod clip_processor;
 mod commands;
+mod database;
 mod events;
 mod game_detector;
 mod library;
@@ -18,8 +19,9 @@ use commands::cloud::get_device_id;
 use commands::default::{read, write};
 // Library commands
 use commands::library::{
-    delete_recording, get_clips, get_recordings, open_file_location, open_recording_folder,
-    open_video,
+    delete_recording, get_clips, get_player_stats, get_recordings, get_total_player_stats,
+    open_file_location, open_recording_folder, open_video, refresh_recordings_cache,
+    save_computed_stats,
 };
 // Recording commands
 use commands::recording::{start_generic_recording, start_recording, stop_recording};
@@ -47,9 +49,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            // Initialize app state
-            app.manage(app_state::AppState::new());
-
+            // Initialize logging first (so we can see database init logs)
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -59,6 +59,31 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            
+            // Initialize SQLite database
+            let db_path = database::get_database_path(app.handle());
+            log::info!("📦 Initializing database at: {:?}", db_path);
+            
+            let db = database::Database::open(&db_path)
+                .expect("Failed to open database");
+            db.init().expect("Failed to initialize database schema");
+            
+            log::info!("✅ Database initialized");
+            
+            // Initialize app state with database
+            app.manage(app_state::AppState::with_database(db));
+
+            // Trigger background sync of recordings cache
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Small delay to let the app finish initializing
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                
+                if let Err(e) = library::sync_recordings_cache(&app_handle).await {
+                    log::error!("Failed to sync recordings cache: {:?}", e);
+                }
+            });
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,6 +111,7 @@ pub fn run() {
             open_file_location,
             get_last_replay_path,
             parse_slp_events,
+            refresh_recordings_cache,
             // Clip commands
             mark_clip_timestamp,
             process_clip_markers,
@@ -94,6 +120,10 @@ pub fn run() {
             compress_video_for_upload,
             delete_temp_file,
             get_device_id,
+            // Stats commands
+            save_computed_stats,
+            get_player_stats,
+            get_total_player_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

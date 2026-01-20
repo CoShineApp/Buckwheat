@@ -1,22 +1,15 @@
+use crate::database::Database;
 use crate::game_detector::GameDetector;
 use crate::recorder::Recorder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::{Instant, SystemTime};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipMarker {
     pub recording_file: String,
     pub timestamp_seconds: f64,
-}
-
-#[derive(Clone)]
-pub struct SlpCacheEntry {
-    pub metadata: serde_json::Value,
-    pub duration: Option<u64>,
-    pub end_time: Option<String>,
-    pub modified_time: SystemTime,
 }
 
 /// Global application state managed by Tauri
@@ -28,11 +21,13 @@ pub struct AppState {
     pub current_recording_file: Mutex<Option<String>>,
     pub last_file_modification: Mutex<Option<Instant>>,
     pub clip_markers: Mutex<Vec<ClipMarker>>,
-    pub slp_cache: Mutex<HashMap<String, SlpCacheEntry>>,
+    /// SQLite database for persistent metadata cache
+    pub database: Arc<Database>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    /// Create new app state with a database at the specified path
+    pub fn with_database(db: Database) -> Self {
         Self {
             game_detector: Mutex::new(None),
             recorder: Mutex::new(None),
@@ -41,13 +36,10 @@ impl AppState {
             current_recording_file: Mutex::new(None),
             last_file_modification: Mutex::new(None),
             clip_markers: Mutex::new(Vec::new()),
-            slp_cache: Mutex::new(HashMap::new()),
+            database: Arc::new(db),
         }
     }
 }
 
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Note: AppState requires a database, so it cannot implement Default.
+// Use AppState::with_database() to construct it.

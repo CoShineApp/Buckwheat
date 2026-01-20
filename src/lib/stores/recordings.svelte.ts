@@ -22,7 +22,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { RecordingSession, RecordingWithMetadata, GameEvent } from "$lib/types/recording";
+import type { RecordingSession, RecordingWithMetadata, GameEvent, PaginatedRecordings } from "$lib/types/recording";
 import { handleTauriError, showSuccess } from "$lib/utils/errors";
 import { recording } from "$lib/stores/recording.svelte";
 import { settings } from "$lib/stores/settings.svelte";
@@ -46,6 +46,16 @@ class RecordingsStore {
 	/** Whether manual recording is stopping */
 	isManualStopping = $state(false);
 
+	// Pagination state
+	/** Current page number (1-indexed) */
+	currentPage = $state(1);
+	/** Total number of pages */
+	totalPages = $state(1);
+	/** Number of recordings per page */
+	perPage = $state(20);
+	/** Total number of recordings */
+	totalRecordings = $state(0);
+
 	/** Whether event listeners are active */
 	private listenersActive = false;
 	/** Reference count for bootstrap calls */
@@ -54,6 +64,8 @@ class RecordingsStore {
 	private eventListenerPromises: Promise<() => void>[] = [];
 	/** Additional cleanup functions */
 	private extraCleanupFns: Array<() => void> = [];
+	/** Current .slp file path for the active recording session (for stats parsing) */
+	private currentSlpPath: string | null = null;
 
 	constructor() {
 		// Start with empty recordings - will load real data on first refresh
@@ -61,20 +73,31 @@ class RecordingsStore {
 	}
 
 	/**
-	 * Fetch recordings from the backend.
-	 * Updates the recordings list with fresh data.
+	 * Fetch recordings from the backend with pagination.
+	 * Updates the recordings list with fresh data for the specified page.
+	 * @param page - Page number to fetch (1-indexed), defaults to current page
 	 */
-	async refresh() {
+	async refresh(page?: number) {
 		this.isLoading = true;
 		this.error = null;
 
+		const targetPage = page ?? this.currentPage;
+
 		try {
-			const sessions = await invoke<RecordingSession[]>("get_recordings");
-			this.recordings = sessions.map((session) => ({
+			const response = await invoke<PaginatedRecordings>("get_recordings", {
+				page: targetPage,
+				perPage: this.perPage,
+			});
+			
+			this.recordings = response.recordings.map((session) => ({
 				...session,
 				is_selected: this.selectedIds.has(session.id),
 			}));
-			console.log(`✅ Loaded ${this.recordings.length} recordings`);
+			this.currentPage = response.page;
+			this.totalPages = response.total_pages;
+			this.totalRecordings = response.total;
+			
+			console.log(`✅ Loaded ${this.recordings.length} recordings (page ${response.page}/${response.total_pages}, total: ${response.total})`);
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : "Failed to fetch recordings";
 			console.error("Failed to fetch recordings:", e);
@@ -82,6 +105,55 @@ class RecordingsStore {
 		} finally {
 			this.isLoading = false;
 		}
+	}
+
+	/**
+	 * Go to the next page of recordings.
+	 */
+	async nextPage() {
+		if (this.currentPage < this.totalPages) {
+			await this.refresh(this.currentPage + 1);
+		}
+	}
+
+	/**
+	 * Go to the previous page of recordings.
+	 */
+	async prevPage() {
+		if (this.currentPage > 1) {
+			await this.refresh(this.currentPage - 1);
+		}
+	}
+
+	/**
+	 * Go to a specific page of recordings.
+	 * @param page - Page number (1-indexed)
+	 */
+	async goToPage(page: number) {
+		const targetPage = Math.max(1, Math.min(page, this.totalPages));
+		if (targetPage !== this.currentPage) {
+			await this.refresh(targetPage);
+		}
+	}
+
+	/**
+	 * Change the number of recordings per page.
+	 * Reloads from page 1 with the new page size.
+	 * @param perPage - Number of recordings per page
+	 */
+	async setPerPage(perPage: number) {
+		this.perPage = Math.max(1, Math.min(perPage, 100));
+		await this.refresh(1);
+	}
+
+	/** Whether there are more pages after the current one */
+	get hasNextPage() {
+		return this.currentPage < this.totalPages;
+	}
+
+	/** Whether there are pages before the current one */
+	get hasPrevPage() {
+		return this.currentPage > 1;
 	}
 
 	/**
@@ -278,6 +350,10 @@ class RecordingsStore {
 
 		this.eventListenerPromises.push(
 			listen<string>("last-replay-updated", (event) => {
+				// Always store the slp path for stats parsing later
+				this.currentSlpPath = event.payload;
+				console.log("[SlippiStats] Stored slp path:", this.currentSlpPath);
+				
 				// Only set .slp path if we're not already recording with a video path
 				// (for auto recordings, recording-started will set the video path)
 				if (!recording.isRecording || !recording.currentReplayPath?.endsWith('.mp4')) {
@@ -288,10 +364,12 @@ class RecordingsStore {
 
 		this.eventListenerPromises.push(
 			listen<string>("recording-stopped", async (event) => {
+				console.log("[SlippiStats] recording-stopped event received, payload:", event.payload);
 				recording.stop();
 
 				// Use the video path from the event payload (guaranteed to be correct)
 				const videoPath = event.payload || recording.currentReplayPath;
+				console.log("[SlippiStats] Using video path:", videoPath);
 				if (videoPath) {
 					try {
 						const clips = await invoke<string[]>("process_clip_markers", {
@@ -310,8 +388,28 @@ class RecordingsStore {
 					showSuccess("Recording stopped automatically");
 				}
 
+				// Capture the slp path we stored earlier (from last-replay-updated event)
+				const slpPath = this.currentSlpPath;
+				console.log("[SlippiStats] Using stored slp path:", slpPath);
+				
 				recording.setReplayPath(null);
+				this.currentSlpPath = null; // Clear for next recording
+				
+				// Trigger a full cache sync to ensure the new recording is indexed
+				console.log("[SlippiStats] Triggering cache sync for new recording...");
+				try {
+					await invoke("refresh_recordings_cache");
+					console.log("[SlippiStats] Cache sync complete");
+				} catch (e) {
+					console.error("[SlippiStats] Cache sync failed:", e);
+				}
+				
+				console.log("[SlippiStats] Refreshing recordings list...");
 				await this.refresh();
+				console.log("[SlippiStats] Refresh complete, recordings count:", this.recordings.length);
+
+				// Parse and save Slippi stats for the recording
+				await this.parseStatsForRecording(videoPath, slpPath);
 			})
 		);
 
@@ -440,6 +538,107 @@ class RecordingsStore {
 	 */
 	isClipOnly(recording: ClipSession | RecordingWithMetadata | undefined): boolean {
 		return !recording?.slp_path;
+	}
+
+	/**
+	 * Parse Slippi stats for a recording and save to database.
+	 * Called after a recording ends to compute L-cancel %, openings/kill, etc.
+	 * @param videoPath - Path to the video file (used to find the recording)
+	 * @param slpPathHint - Optional direct path to the .slp file (from recording session)
+	 */
+	private async parseStatsForRecording(videoPath: string | null, slpPathHint?: string | null) {
+		console.log("[SlippiStats] parseStatsForRecording called with videoPath:", videoPath, "slpPathHint:", slpPathHint);
+		
+		if (!videoPath) {
+			console.log("[SlippiStats] No video path provided, skipping stats parsing");
+			return;
+		}
+
+		try {
+			// Normalize path separators for comparison
+			const normalizedVideoPath = videoPath.replace(/\\/g, "/");
+			
+			console.log("[SlippiStats] Looking for recording in list. Total recordings:", this.recordings.length);
+			console.log("[SlippiStats] Normalized video path:", normalizedVideoPath);
+			
+			// Find the recording in our list (we just synced and refreshed)
+			const rec = this.recordings.find((r) => {
+				const normalizedRecPath = r.video_path?.replace(/\\/g, "/");
+				return normalizedRecPath === normalizedVideoPath;
+			});
+			
+			// Use the recording from the list, or create a minimal one with the hint
+			let recordingId: string;
+			let slpPath: string | null;
+			
+			if (rec) {
+				console.log("[SlippiStats] Found recording:", rec.id, "slp_path:", rec.slp_path);
+				recordingId = rec.id;
+				slpPath = rec.slp_path || slpPathHint || null;
+			} else {
+				console.warn("[SlippiStats] Recording not found in list, using slpPathHint. Video paths in list:", 
+					this.recordings.slice(0, 5).map(r => r.video_path));
+				
+				// If recording not found but we have the slp path hint, we can still parse stats
+				// We'll need to find or create the recording ID after cache syncs
+				if (!slpPathHint) {
+					console.log("[SlippiStats] No slp path hint available, cannot parse stats");
+					return;
+				}
+				
+				// Try to find by slp_path instead
+				const recBySlp = this.recordings.find((r) => {
+					const normalizedSlpPath = r.slp_path?.replace(/\\/g, "/");
+					const normalizedHint = slpPathHint?.replace(/\\/g, "/");
+					return normalizedSlpPath === normalizedHint;
+				});
+				
+				if (recBySlp) {
+					console.log("[SlippiStats] Found recording by slp_path:", recBySlp.id);
+					recordingId = recBySlp.id;
+					slpPath = recBySlp.slp_path;
+				} else {
+					console.log("[SlippiStats] Recording not found by slp_path either, will retry after delay");
+					// Wait a bit and retry once more
+					await new Promise(resolve => setTimeout(resolve, 2000));
+					await this.refresh();
+					
+					const retryRec = this.recordings.find((r) => {
+						const normalizedRecPath = r.video_path?.replace(/\\/g, "/");
+						return normalizedRecPath === normalizedVideoPath;
+					});
+					
+					if (!retryRec) {
+						console.error("[SlippiStats] Recording still not found after retry, giving up");
+						return;
+					}
+					
+					console.log("[SlippiStats] Found recording on retry:", retryRec.id);
+					recordingId = retryRec.id;
+					slpPath = retryRec.slp_path || slpPathHint;
+				}
+			}
+
+			if (!slpPath) {
+				console.log("[SlippiStats] No .slp path for recording, skipping stats parsing");
+				return;
+			}
+
+			console.log("[SlippiStats] Parsing Slippi stats for recording", recordingId, "from", slpPath);
+
+			// Import the slippi-stats service dynamically to avoid loading it on every page
+			const { parseAndSaveSlippiStats } = await import("$lib/services/slippi-stats");
+
+			const success = await parseAndSaveSlippiStats(slpPath, recordingId);
+			if (success) {
+				console.log("[SlippiStats] Stats saved successfully for recording", recordingId);
+			} else {
+				console.warn("[SlippiStats] Failed to parse stats for recording", recordingId);
+			}
+		} catch (error) {
+			console.error("[SlippiStats] Error parsing Slippi stats:", error);
+			// Don't show error to user - stats parsing is non-critical
+		}
 	}
 }
 
