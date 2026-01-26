@@ -1,15 +1,9 @@
-//! Slippi replay file parsing and event extraction module
+//! Slippi type definitions for the API
 //!
-//! This module handles all .slp file parsing, metadata extraction,
-//! and game event detection.
+//! This module contains type definitions used by the API.
+//! Actual .slp parsing is done in the frontend using slippi-js.
 
-pub mod events;
-pub mod metadata;
-pub mod parser;
 pub mod types;
 
-// Re-export commonly used items
-pub use events::extract_death_events;
-pub use metadata::{extract_metadata, frames_to_seconds};
-pub use parser::parse_slp_file;
-pub use types::{GameEvent, PlayerInfo, RecordingSession, SlippiMetadata};
+// Re-export types used by the API
+pub use types::{PlayerInfo, RecordingSession, SlippiMetadata};

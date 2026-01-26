@@ -32,7 +32,7 @@ use commands::settings::{
 };
 // Slippi commands
 use commands::slippi::{
-    get_default_slippi_path, get_last_replay_path, parse_slp_events, start_watching, stop_watching,
+    get_default_slippi_path, get_last_replay_path, start_watching, stop_watching,
 };
 // Window commands
 use commands::window::{
@@ -55,8 +55,6 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
-                        // Filter out verbose peppi library logs
-                        .filter(|metadata| !metadata.target().starts_with("peppi::"))
                         .build(),
                 )?;
             }
@@ -111,7 +109,6 @@ pub fn run() {
             get_recording_directory,
             open_file_location,
             get_last_replay_path,
-            parse_slp_events,
             refresh_recordings_cache,
             // Clip commands
             mark_clip_timestamp,

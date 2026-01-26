@@ -42,8 +42,6 @@ log = "0.4"
 sysinfo = "0.31"
 base64 = "0.22"
 png = "0.17"
-peppi = "2.1"
-ssbm-data = "0.1"
 walkdir = "2"
 # Device ID generation only
 uuid = { version = "1.11", features = ["v4", "serde"] }

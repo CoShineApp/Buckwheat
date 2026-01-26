@@ -135,13 +135,18 @@ export async function parseSlippiStats(
 			const groundTechCount = sumObjectValues(actionCounts?.groundTechCount);
 			const wallTechCount = sumObjectValues(actionCounts?.wallTechCount);
 
+			// Port in slippi-js is 0-indexed (0-3), same as Rust/peppi
+			// The fallback uses playerIndex which is also 0-indexed
+			const port = player.port ?? playerIndex;
+			console.log(`[SlippiStats] Player ${playerIndex}: port=${port}, connectCode=${connectCode}`);
+
 			const playerStats: PlayerStatsForDB = {
 				playerIndex,
 				connectCode,
 				displayName,
 				characterId: player.characterId ?? 0,
 				characterColor: player.characterColor ?? 0,
-				port: player.port ?? playerIndex + 1,
+				port,
 
 				// Overall performance
 				totalDamage: overall?.totalDamage ?? 0,

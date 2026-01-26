@@ -202,14 +202,6 @@ pub async fn stop_watching(state: State<'_, AppState>) -> Result<(), Error> {
     Ok(())
 }
 
-/// Parse a .slp file and extract game events
-#[tauri::command]
-pub async fn parse_slp_events(slp_path: String) -> Result<Vec<crate::slippi::GameEvent>, Error> {
-    let game = crate::slippi::parse_slp_file(&slp_path)?;
-    let events = crate::slippi::extract_death_events(&game)?;
-    Ok(events)
-}
-
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================

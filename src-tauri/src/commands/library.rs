@@ -4,7 +4,7 @@
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::database::{self, RecordingWithStats, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions};
+use crate::database::{self, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions};
 use crate::slippi::{PlayerInfo, RecordingSession, SlippiMetadata};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -76,7 +76,7 @@ pub async fn get_clips(
     let clips: Vec<RecordingSession> = all
         .into_iter()
         .filter(|row| row.video_path.contains("Clips"))
-        .map(|row| recording_row_to_session(row, None))
+        .map(|row| recording_row_to_session(row, None, Vec::new()))
         .collect();
     
     log::info!("✅ Found {} clip(s)", clips.len());
@@ -198,7 +198,9 @@ pub struct ComputedPlayerStats {
     pub final_percent: Option<f64>,
 }
 
-/// Save computed stats from slippi-js to the database
+/// Save computed stats from slippi-js to the database.
+/// This is the SINGLE ENTRY POINT for saving game statistics.
+/// Creates/updates both game_stats and player_stats tables.
 #[tauri::command]
 pub async fn save_computed_stats(
     stats: ComputedGameStats,
@@ -209,35 +211,43 @@ pub async fn save_computed_stats(
     let db = state.database.clone();
     let conn = db.connection();
     
-    // Update game_stats with match info
-    if let Ok(Some(_existing)) = database::get_game_stats_by_id(&conn, &stats.recording_id) {
-        // Update existing game stats with new match info columns
-        // Note: We intentionally do NOT update winner_port/loser_port here.
-        // The initial sync from Rust/peppi sets these correctly. Overwriting them
-        // from frontend slippi-js parsing caused race conditions and inconsistencies.
-        conn.execute(
-            "UPDATE game_stats SET 
-                match_id = ?, game_number = ?, game_end_method = ?,
-                stage = ?, game_duration = ?, total_frames = ?,
-                is_pal = ?, played_on = ?
-            WHERE id = ?",
-            rusqlite::params![
-                stats.match_id,
-                stats.game_number,
-                stats.game_end_method,
-                stats.stage,
-                stats.game_duration,
-                stats.total_frames,
-                stats.is_pal as i32,
-                stats.played_on,
-                stats.recording_id,
-            ],
-        ).map_err(|e| Error::RecordingFailed(format!("Failed to update game stats: {}", e)))?;
-        
-        log::debug!("Updated game_stats for {}", stats.recording_id);
-    } else {
-        log::debug!("No existing game_stats found for {}, will be created by sync", stats.recording_id);
-    }
+    // Get player info for game_stats
+    let p1 = stats.players.get(0);
+    let p2 = stats.players.get(1);
+    
+    // Determine winner by kill_count = 4 (took all stocks)
+    let winner_port = stats.players.iter()
+        .find(|p| p.kill_count == 4)
+        .map(|p| p.port);
+    let loser_port = stats.players.iter()
+        .find(|p| p.kill_count != 4)
+        .map(|p| p.port);
+    
+    // Build and upsert game_stats (creates if missing, updates if exists)
+    let game_stats = database::GameStatsRow {
+        id: stats.recording_id.clone(),
+        player1_id: p1.and_then(|p| p.connect_code.clone()),
+        player2_id: p2.and_then(|p| p.connect_code.clone()),
+        player1_port: p1.map(|p| p.port),
+        player2_port: p2.map(|p| p.port),
+        player1_character: p1.map(|p| p.character_id),
+        player2_character: p2.map(|p| p.character_id),
+        player1_color: p1.map(|p| p.character_color),
+        player2_color: p2.map(|p| p.character_color),
+        winner_port,
+        loser_port,
+        stage: Some(stats.stage),
+        game_duration: Some(stats.game_duration),
+        total_frames: Some(stats.total_frames),
+        is_pal: Some(stats.is_pal),
+        played_on: stats.played_on.clone(),
+    };
+    
+    database::upsert_game_stats(&conn, &game_stats)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to save game stats: {}", e)))?;
+    
+    log::info!("[SlippiStats] Saved game_stats: stage={}, winner_port={:?}", 
+        stats.stage, winner_port);
     
     // Save player stats
     for player in &stats.players {
@@ -403,59 +413,72 @@ pub fn open_file_location(path: String) -> Result<(), Error> {
 // ============================================================================
 
 /// Convert a RecordingWithStats (from paginated query) to RecordingSession
-fn recording_with_stats_to_session(rws: RecordingWithStats) -> RecordingSession {
+fn recording_with_stats_to_session(rws: database::RecordingWithStats) -> RecordingSession {
     let row = rws.recording;
-    let stats = rws.stats;
+    let game_stats = rws.stats;
+    let player_stats = rws.player_stats;
     
-    recording_row_to_session(row, stats)
+    recording_row_to_session(row, game_stats, player_stats)
 }
 
 /// Convert a database row + optional stats to a RecordingSession
+/// Player info is now built from player_stats (source of truth for kill_count, character, etc.)
+/// Game stats only provides game-level metadata (stage, duration, etc.)
 fn recording_row_to_session(
     row: database::RecordingRow,
-    stats: Option<database::GameStatsRow>,
+    game_stats: Option<database::GameStatsRow>,
+    player_stats: Vec<database::PlayerStatsRow>,
 ) -> RecordingSession {
-    // Build SlippiMetadata from stats if available
-    let slippi_metadata = stats.as_ref().map(|s| {
-        // Build players array from stats
-        let mut players = Vec::new();
+    // Build SlippiMetadata - players come from player_stats now
+    let slippi_metadata = if !player_stats.is_empty() || game_stats.is_some() {
+        // Build players array from player_stats (includes kill_count for winner detection)
+        let players: Vec<PlayerInfo> = player_stats
+            .iter()
+            .map(|ps| PlayerInfo {
+                character_id: ps.character_id as u8,
+                character_color: ps.character_color as u8,
+                player_tag: ps.connect_code.clone().unwrap_or_else(|| 
+                    ps.display_name.clone().unwrap_or_else(|| format!("P{}", ps.port + 1))
+                ),
+                port: ps.port as u8,
+                kill_count: Some(ps.kill_count),
+            })
+            .collect();
         
-        if let Some(p1_char) = s.player1_character {
-            players.push(PlayerInfo {
-                character_id: p1_char as u8,
-                character_color: s.player1_color.unwrap_or(0) as u8,
-                player_tag: s.player1_id.clone().unwrap_or_default(),
-                port: s.player1_port.unwrap_or(1) as u8,
-            });
-        }
-        
-        if let Some(p2_char) = s.player2_character {
-            players.push(PlayerInfo {
-                character_id: p2_char as u8,
-                character_color: s.player2_color.unwrap_or(0) as u8,
-                player_tag: s.player2_id.clone().unwrap_or_default(),
-                port: s.player2_port.unwrap_or(2) as u8,
-            });
-        }
-        
-        // Build characters array
         let characters: Vec<u8> = players.iter().map(|p| p.character_id).collect();
         
-        SlippiMetadata {
+        // Get game-level metadata from game_stats
+        let (stage, game_duration, total_frames, is_pal, played_on, winner_port) = 
+            if let Some(ref gs) = game_stats {
+                (
+                    gs.stage.unwrap_or(0) as u16,
+                    gs.game_duration.unwrap_or(0),
+                    gs.total_frames.unwrap_or(0),
+                    gs.is_pal.unwrap_or(false),
+                    gs.played_on.clone(),
+                    gs.winner_port.map(|p| p as u8),
+                )
+            } else {
+                (0, 0, 0, false, None, None)
+            };
+        
+        Some(SlippiMetadata {
             characters,
-            stage: s.stage.unwrap_or(0) as u16,
+            stage,
             players,
-            game_duration: s.game_duration.unwrap_or(0),
+            game_duration,
             start_time: row.start_time.clone().unwrap_or_default(),
-            is_pal: s.is_pal.unwrap_or(false),
-            winner_port: s.winner_port.map(|p| p as u8),
-            played_on: s.played_on.clone(),
-            total_frames: s.total_frames.unwrap_or(0),
-        }
-    });
+            is_pal,
+            winner_port,
+            played_on,
+            total_frames,
+        })
+    } else {
+        None
+    };
     
     // Calculate duration from stats if available
-    let duration = stats
+    let duration = game_stats
         .as_ref()
         .and_then(|s| s.game_duration)
         .map(|d| (d as f64 / 60.0) as u64);

@@ -1,12 +1,13 @@
 //! Background sync of recordings cache
 //!
 //! Scans for new, modified, and deleted recordings and updates the SQLite cache.
+//! Note: This only indexes video files and finds matching .slp paths.
+//! Actual .slp parsing and stats extraction is done by the frontend (slippi-js).
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::database::{self, GameStatsRow, RecordingRow};
+use crate::database::{self, RecordingRow};
 use crate::game_detector::slippi_paths;
-use crate::slippi;
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::SystemTime;
@@ -135,7 +136,9 @@ fn check_file_modified(db: &database::Database, video_path: &str) -> bool {
     }
 }
 
-/// Parse a recording and cache it in the database
+/// Index a recording and cache it in the database.
+/// This only stores file metadata and finds the matching .slp path.
+/// Actual .slp parsing is done by the frontend (slippi-js) via save_computed_stats.
 async fn parse_and_cache_recording(
     video_path: &Path,
     slippi_dir: &str,
@@ -167,80 +170,24 @@ async fn parse_and_cache_recording(
                 .to_rfc3339()
         });
     
-    // Find matching .slp file
+    // Find matching .slp file (just the path, no parsing)
     let video_filename = video_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
     let slp_path = find_matching_slp_sync(video_filename, slippi_dir);
     
-    // Parse Slippi metadata if .slp exists
-    let (start_time, game_stats) = if let Some(ref slp) = slp_path {
-        match slippi::parse_slp_file(slp) {
-            Ok(game) => {
-                let meta = slippi::extract_metadata(&game);
-                
-                // Extract player info
-                let (player1, player2) = if meta.players.len() >= 2 {
-                    (Some(&meta.players[0]), Some(&meta.players[1]))
-                } else if meta.players.len() == 1 {
-                    (Some(&meta.players[0]), None)
-                } else {
-                    (None, None)
-                };
-                
-                // Determine loser port (opposite of winner)
-                let loser_port = meta.winner_port.and_then(|winner| {
-                    if meta.players.len() >= 2 {
-                        meta.players
-                            .iter()
-                            .find(|p| p.port != winner)
-                            .map(|p| p.port)
-                    } else {
-                        None
-                    }
-                });
-                
-                let stats = GameStatsRow {
-                    id: id.clone(),
-                    player1_id: player1.map(|p| p.player_tag.clone()),
-                    player2_id: player2.map(|p| p.player_tag.clone()),
-                    player1_port: player1.map(|p| p.port as i32),
-                    player2_port: player2.map(|p| p.port as i32),
-                    player1_character: player1.map(|p| p.character_id as i32),
-                    player2_character: player2.map(|p| p.character_id as i32),
-                    player1_color: player1.map(|p| p.character_color as i32),
-                    player2_color: player2.map(|p| p.character_color as i32),
-                    winner_port: meta.winner_port.map(|p| p as i32),
-                    loser_port: loser_port.map(|p| p as i32),
-                    stage: Some(meta.stage as i32),
-                    game_duration: Some(meta.game_duration),
-                    total_frames: Some(meta.total_frames),
-                    is_pal: Some(meta.is_pal),
-                    played_on: meta.played_on,
-                };
-                
-                (Some(meta.start_time), Some(stats))
-            }
-            Err(e) => {
-                log::warn!("Failed to parse .slp file: {:?}", e);
-                (None, None)
-            }
-        }
-    } else {
-        // Use file creation time as start_time if no .slp
-        let fallback_time = file_meta
-            .created()
-            .or_else(|_| file_meta.modified())
-            .ok()
-            .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| {
-                chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
-                    .unwrap_or_default()
-                    .to_rfc3339()
-            });
-        (fallback_time, None)
-    };
+    // Use file creation/modification time as start_time
+    let start_time = file_meta
+        .created()
+        .or_else(|_| file_meta.modified())
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
+                .unwrap_or_default()
+                .to_rfc3339()
+        });
     
     // Generate thumbnail (use video filename for thumbnail naming)
     let thumbnail_id = video_path
@@ -249,7 +196,7 @@ async fn parse_and_cache_recording(
         .unwrap_or(&id);
     let thumbnail_path = super::thumbnails::generate_thumbnail_if_missing(video_path, thumbnail_id);
     
-    // Create recording row
+    // Create recording row (no game_stats - that comes from frontend slippi-js parsing)
     let row = RecordingRow {
         id: id.clone(),
         video_path: video_path_str,
@@ -265,16 +212,8 @@ async fn parse_and_cache_recording(
     // Insert/update in database
     {
         let conn = db.connection();
-        
-        // Upsert recording
         database::upsert_recording(&conn, &row)
             .map_err(|e| Error::InitializationError(format!("Database error: {}", e)))?;
-        
-        // Upsert game stats if we have them
-        if let Some(stats) = game_stats {
-            database::upsert_game_stats(&conn, &stats)
-                .map_err(|e| Error::InitializationError(format!("Database error (stats): {}", e)))?;
-        }
     }
     
     if is_new {

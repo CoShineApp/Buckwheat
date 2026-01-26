@@ -47,6 +47,7 @@ pub struct GameStatsRow {
 pub struct RecordingWithStats {
     pub recording: RecordingRow,
     pub stats: Option<GameStatsRow>,
+    pub player_stats: Vec<PlayerStatsRow>,
 }
 
 /// Player stats row from the player_stats table
@@ -121,7 +122,7 @@ pub fn get_all_recordings(conn: &Connection) -> rusqlite::Result<Vec<RecordingRo
     rows.collect()
 }
 
-/// Get recordings with pagination, joined with game_stats
+/// Get recordings with pagination, joined with game_stats and player_stats
 pub fn get_recordings_paginated(
     conn: &Connection, 
     limit: i32, 
@@ -134,7 +135,7 @@ pub fn get_recordings_paginated(
         |row| row.get(0),
     )?;
     
-    // Get paginated rows with stats
+    // Get paginated rows with game stats
     let mut stmt = conn.prepare(
         "SELECT r.id, r.video_path, r.slp_path, r.file_size, r.file_modified_at, 
                 r.thumbnail_path, r.start_time, r.cached_at, r.needs_reparse,
@@ -186,10 +187,89 @@ pub fn get_recordings_paginated(
             None
         };
         
-        Ok(RecordingWithStats { recording, stats })
+        // Player stats will be fetched separately - start with empty
+        Ok(RecordingWithStats { recording, stats, player_stats: Vec::new() })
     })?;
     
-    let results: Vec<RecordingWithStats> = rows.collect::<Result<Vec<_>, _>>()?;
+    let mut results: Vec<RecordingWithStats> = rows.collect::<Result<Vec<_>, _>>()?;
+    
+    // Fetch player_stats for all recordings in one query
+    if !results.is_empty() {
+        let recording_ids: Vec<String> = results.iter().map(|r| r.recording.id.clone()).collect();
+        let placeholders: String = recording_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        
+        let query = format!(
+            "SELECT id, recording_id, player_index, connect_code, display_name, 
+                    character_id, character_color, port, total_damage, kill_count,
+                    conversion_count, successful_conversions, openings_per_kill, 
+                    damage_per_opening, neutral_win_ratio, counter_hit_ratio, 
+                    beneficial_trade_ratio, inputs_total, inputs_per_minute, avg_kill_percent,
+                    wavedash_count, waveland_count, air_dodge_count, dash_dance_count,
+                    spot_dodge_count, ledgegrab_count, roll_count, grab_count, throw_count,
+                    ground_tech_count, wall_tech_count, wall_jump_tech_count,
+                    l_cancel_success_count, l_cancel_fail_count, stocks_remaining, final_percent
+             FROM player_stats 
+             WHERE recording_id IN ({})
+             ORDER BY recording_id, player_index",
+            placeholders
+        );
+        
+        let mut stmt = conn.prepare(&query)?;
+        let params: Vec<&dyn rusqlite::ToSql> = recording_ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        
+        let player_rows = stmt.query_map(params.as_slice(), |row| {
+            Ok(PlayerStatsRow {
+                id: row.get(0)?,
+                recording_id: row.get(1)?,
+                player_index: row.get(2)?,
+                connect_code: row.get(3)?,
+                display_name: row.get(4)?,
+                character_id: row.get(5)?,
+                character_color: row.get(6)?,
+                port: row.get(7)?,
+                total_damage: row.get(8)?,
+                kill_count: row.get(9)?,
+                conversion_count: row.get(10)?,
+                successful_conversions: row.get(11)?,
+                openings_per_kill: row.get(12)?,
+                damage_per_opening: row.get(13)?,
+                neutral_win_ratio: row.get(14)?,
+                counter_hit_ratio: row.get(15)?,
+                beneficial_trade_ratio: row.get(16)?,
+                inputs_total: row.get(17)?,
+                inputs_per_minute: row.get(18)?,
+                avg_kill_percent: row.get(19)?,
+                wavedash_count: row.get(20)?,
+                waveland_count: row.get(21)?,
+                air_dodge_count: row.get(22)?,
+                dash_dance_count: row.get(23)?,
+                spot_dodge_count: row.get(24)?,
+                ledgegrab_count: row.get(25)?,
+                roll_count: row.get(26)?,
+                grab_count: row.get(27)?,
+                throw_count: row.get(28)?,
+                ground_tech_count: row.get(29)?,
+                wall_tech_count: row.get(30)?,
+                wall_jump_tech_count: row.get(31)?,
+                l_cancel_success_count: row.get(32)?,
+                l_cancel_fail_count: row.get(33)?,
+                stocks_remaining: row.get(34)?,
+                final_percent: row.get(35)?,
+            })
+        })?;
+        
+        let all_player_stats: Vec<PlayerStatsRow> = player_rows.collect::<Result<Vec<_>, _>>()?;
+        
+        // Group player stats by recording_id
+        for result in &mut results {
+            result.player_stats = all_player_stats
+                .iter()
+                .filter(|ps| ps.recording_id == result.recording.id)
+                .cloned()
+                .collect();
+        }
+    }
+    
     Ok((results, total))
 }
 
@@ -307,38 +387,6 @@ pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::R
         ],
     )?;
     Ok(())
-}
-
-/// Get game stats by recording ID
-pub fn get_game_stats_by_id(conn: &Connection, id: &str) -> rusqlite::Result<Option<GameStatsRow>> {
-    conn.query_row(
-        "SELECT id, player1_id, player2_id, player1_port, player2_port,
-                player1_character, player2_character, player1_color, player2_color,
-                winner_port, loser_port, stage, game_duration, total_frames,
-                is_pal, played_on
-         FROM game_stats WHERE id = ?",
-        params![id],
-        |row| {
-            Ok(GameStatsRow {
-                id: row.get(0)?,
-                player1_id: row.get(1)?,
-                player2_id: row.get(2)?,
-                player1_port: row.get(3)?,
-                player2_port: row.get(4)?,
-                player1_character: row.get(5)?,
-                player2_character: row.get(6)?,
-                player1_color: row.get(7)?,
-                player2_color: row.get(8)?,
-                winner_port: row.get(9)?,
-                loser_port: row.get(10)?,
-                stage: row.get(11)?,
-                game_duration: row.get(12)?,
-                total_frames: row.get(13)?,
-                is_pal: row.get::<_, Option<i32>>(14)?.map(|v| v != 0),
-                played_on: row.get(15)?,
-            })
-        },
-    ).optional()
 }
 
 // ============================================================================
@@ -599,10 +647,11 @@ pub fn get_aggregated_player_stats(
     let where_clause = where_clauses.join(" AND ");
     
     // 1. Overall stats
+    // Winner is determined by kill_count = 4 (took all 4 stocks in a standard game)
     let overall_query = format!(
         "SELECT 
             COUNT(*) as total_games,
-            SUM(CASE WHEN p.port = g.winner_port THEN 1 ELSE 0 END) as total_wins,
+            SUM(CASE WHEN p.kill_count = 4 THEN 1 ELSE 0 END) as total_wins,
             AVG(
                 CAST(p.l_cancel_success_count AS FLOAT) / 
                 NULLIF(p.l_cancel_success_count + p.l_cancel_fail_count, 0)
@@ -650,11 +699,12 @@ pub fn get_aggregated_player_stats(
     )?;
 
     // 2. Character stats (opponents faced) - with filters applied
+    // Winner determined by kill_count = 4
     let character_query = format!(
         "SELECT 
             opp.character_id,
             COUNT(*) as games,
-            SUM(CASE WHEN p.port = g.winner_port THEN 1 ELSE 0 END) as wins
+            SUM(CASE WHEN p.kill_count = 4 THEN 1 ELSE 0 END) as wins
          FROM player_stats p
          JOIN game_stats g ON p.recording_id = g.id
          JOIN recordings r ON p.recording_id = r.id
@@ -678,11 +728,12 @@ pub fn get_aggregated_player_stats(
     })?.collect::<Result<Vec<_>, _>>()?;
 
     // 3. Stage stats - with filters applied
+    // Winner determined by kill_count = 4
     let stage_query = format!(
         "SELECT 
             g.stage,
             COUNT(*) as games,
-            SUM(CASE WHEN p.port = g.winner_port THEN 1 ELSE 0 END) as wins
+            SUM(CASE WHEN p.kill_count = 4 THEN 1 ELSE 0 END) as wins
          FROM player_stats p
          JOIN game_stats g ON p.recording_id = g.id
          JOIN recordings r ON p.recording_id = r.id

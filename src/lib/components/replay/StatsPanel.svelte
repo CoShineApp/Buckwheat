@@ -19,7 +19,7 @@
 			<!-- Players -->
 			<div class="space-y-3">
 				{#each metadata.players as player}
-					{@const isWinner = player.port === metadata.winner_port}
+					{@const isWinner = player.kill_count === 4}
 					<div
 						class="flex items-center gap-3 rounded-lg border p-3 {isWinner
 							? 'border-green-500 bg-green-500/10'

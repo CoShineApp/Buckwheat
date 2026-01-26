@@ -1,27 +1,9 @@
 //! Type definitions for Slippi game data
+//!
+//! These types are used by the API to return data to the frontend.
+//! Actual .slp parsing is done in the frontend using slippi-js.
 
 use serde::{Deserialize, Serialize};
-
-// ============================================================================
-// GAME EVENTS
-// ============================================================================
-
-/// Events that occur during a game (deaths, combos, etc.)
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum GameEvent {
-    #[serde(rename = "death")]
-    Death(DeathEvent),
-}
-
-/// A player death event
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DeathEvent {
-    pub frame: i32,
-    pub timestamp: f64,
-    pub port: u8,
-    pub player_tag: String,
-}
 
 // ============================================================================
 // GAME METADATA
@@ -59,8 +41,10 @@ pub struct PlayerInfo {
     pub character_color: u8,
     /// Player tag (connect code or netplay name)
     pub player_tag: String,
-    /// Controller port (1-4)
+    /// Controller port (0-indexed)
     pub port: u8,
+    /// Number of kills (stocks taken from opponent). Winner has 4 in a standard game.
+    pub kill_count: Option<i32>,
 }
 
 // ============================================================================

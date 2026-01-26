@@ -206,8 +206,8 @@
 											</div>
 											<div class="flex flex-col gap-0.5">
 												{#if recording.slippi_metadata.players.length >= 2}
-													{@const winner = recording.slippi_metadata.players.find(p => p.port === recording.slippi_metadata?.winner_port)}
-													{@const loser = recording.slippi_metadata.players.find(p => p.port !== recording.slippi_metadata?.winner_port)}
+													{@const winner = recording.slippi_metadata.players.find(p => p.kill_count === 4)}
+													{@const loser = recording.slippi_metadata.players.find(p => p.kill_count !== 4)}
 													
 												{#if winner}
 													<div class="flex items-center gap-1.5 text-sm">
