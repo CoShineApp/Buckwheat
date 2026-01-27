@@ -28,6 +28,13 @@ pub async fn sync_recordings_cache(app: &tauri::AppHandle) -> Result<(), Error> 
     let recording_dir = super::get_recording_directory(app).await?;
     let slippi_dir = get_slippi_directory(app)?;
     
+    // Also scan the Clips directory (sibling to recording_dir)
+    let recording_dir_path = Path::new(&recording_dir);
+    let clips_dir = recording_dir_path
+        .parent()
+        .map(|p| p.join("Clips"))
+        .unwrap_or_else(|| recording_dir_path.join("Clips"));
+    
     // Get existing cached paths
     let cached_paths: HashSet<String> = {
         let conn = db.connection();
@@ -42,40 +49,52 @@ pub async fn sync_recordings_cache(app: &tauri::AppHandle) -> Result<(), Error> 
     let mut new_count = 0;
     let mut updated_count = 0;
     
-    for entry in WalkDir::new(&recording_dir)
-        .max_depth(3)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("mp4") {
+    // Directories to scan: recordings dir + clips dir
+    let dirs_to_scan = vec![
+        recording_dir.clone(),
+        clips_dir.to_string_lossy().to_string(),
+    ];
+    
+    for scan_dir in &dirs_to_scan {
+        if !Path::new(scan_dir).exists() {
             continue;
         }
         
-        let video_path = path.to_string_lossy().to_string();
-        found_paths.insert(video_path.clone());
-        
-        // Check if we need to parse this file
-        let needs_parse = if cached_paths.contains(&video_path) {
-            // Check if file was modified
-            check_file_modified(&db, &video_path)
-        } else {
-            // New file
-            true
-        };
-        
-        if needs_parse {
-            // Parse and cache the recording
-            match parse_and_cache_recording(path, &slippi_dir, &db).await {
-                Ok(is_new) => {
-                    if is_new {
-                        new_count += 1;
-                    } else {
-                        updated_count += 1;
+        for entry in WalkDir::new(scan_dir)
+            .max_depth(3)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("mp4") {
+                continue;
+            }
+            
+            let video_path = path.to_string_lossy().to_string();
+            found_paths.insert(video_path.clone());
+            
+            // Check if we need to parse this file
+            let needs_parse = if cached_paths.contains(&video_path) {
+                // Check if file was modified
+                check_file_modified(&db, &video_path)
+            } else {
+                // New file
+                true
+            };
+            
+            if needs_parse {
+                // Parse and cache the recording
+                match parse_and_cache_recording(path, &slippi_dir, &db).await {
+                    Ok(is_new) => {
+                        if is_new {
+                            new_count += 1;
+                        } else {
+                            updated_count += 1;
+                        }
                     }
-                }
-                Err(e) => {
-                    log::warn!("Failed to parse recording {:?}: {:?}", path, e);
+                    Err(e) => {
+                        log::warn!("Failed to parse recording {:?}: {:?}", path, e);
+                    }
                 }
             }
         }

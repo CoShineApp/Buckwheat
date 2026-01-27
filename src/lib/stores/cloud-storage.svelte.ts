@@ -125,7 +125,7 @@ class CloudStorageStore {
 			}
 
 			let query = auth.supabase
-				.from('public_clips')
+				.from('clips')
 				.select('*')
 				.order('uploaded_at', { ascending: false });
 
@@ -149,8 +149,160 @@ class CloudStorageStore {
 			// Don't set global error for this, just log it
 		}
 	}
-	
-	// ... rest of methods
+
+	/**
+	 * Refresh all cloud data (uploads, clips, and storage usage).
+	 */
+	async refreshAll() {
+		this.loading = true;
+		try {
+			await Promise.all([
+				this.refreshUploads(),
+				this.refreshUserClips(),
+				auth.loadProfile(), // Refresh storage usage
+			]);
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	/**
+	 * Create a public clip by uploading to cloud storage.
+	 * Returns the clip data including share code.
+	 * @param videoPath - Local path to the video file
+	 * @param deviceId - Device ID for anonymous uploads
+	 * @param metadata - Optional metadata (slippi_metadata, duration, etc.)
+	 */
+	async createPublicClip(
+		videoPath: string,
+		deviceId: string,
+		metadata?: { slippi_metadata?: unknown; duration?: number | null }
+	): Promise<{ clip: CloudClip; alreadyExists: boolean }> {
+		// Extract filename from path
+		const filename = videoPath.split(/[/\\]/).pop() || 'clip.mp4';
+		
+		// Check if this clip was already uploaded (by filename) in local cache
+		const existing = this.userClips.find(c => c.filename === filename);
+		if (existing) {
+			return { clip: existing, alreadyExists: true };
+		}
+
+		// Read the video file
+		const videoData = await readFile(videoPath);
+		
+		// Generate upload URL from edge function
+		// This also creates the database record and checks for duplicates
+		const { data: uploadData, error: uploadError } = await auth.supabase.functions.invoke(
+			'generate-clip-upload-url',
+			{
+				body: {
+					fileName: filename,
+					fileSize: videoData.byteLength,
+					deviceId,
+					metadata: metadata || null,
+				},
+			}
+		);
+
+		if (uploadError) {
+			throw new Error(uploadError.message || 'Failed to get upload URL');
+		}
+
+		// Check if clip already exists (server-side check)
+		if (uploadData?.alreadyExists && uploadData?.clip) {
+			const existingClip: CloudClip = uploadData.clip;
+			// Add to local cache if not present
+			if (!this.userClips.find(c => c.id === existingClip.id)) {
+				this.userClips = [existingClip, ...this.userClips];
+			}
+			return { clip: existingClip, alreadyExists: true };
+		}
+
+		if (!uploadData?.uploadUrl) {
+			throw new Error('Failed to get upload URL');
+		}
+
+		// Upload to B2/R2 using the signed URL
+		const uploadResponse = await fetch(uploadData.uploadUrl, {
+			method: 'PUT',
+			body: videoData,
+			headers: {
+				'Content-Type': 'video/mp4',
+			},
+		});
+
+		if (!uploadResponse.ok) {
+			throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+		}
+
+		// The clip record was already created by generate-clip-upload-url
+		const clipData = uploadData.clip;
+		
+		// Build the CloudClip object from the response
+		const newClip: CloudClip = {
+			id: clipData.id,
+			user_id: clipData.user_id || null,
+			device_id: clipData.device_id || deviceId,
+			filename: clipData.filename || filename,
+			b2_file_id: clipData.b2_file_id || null,
+			b2_file_name: clipData.b2_file_name || null,
+			file_size: clipData.file_size || videoData.byteLength,
+			duration_seconds: metadata?.duration || null,
+			share_code: clipData.share_code || uploadData.shareCode,
+			uploaded_at: clipData.uploaded_at || new Date().toISOString(),
+			metadata: clipData.metadata || metadata || null,
+		};
+		
+		this.userClips = [newClip, ...this.userClips];
+		
+		// Refresh auth profile to update storage usage
+		await auth.loadProfile();
+
+		return { clip: newClip, alreadyExists: false };
+	}
+
+	/**
+	 * Delete an upload from cloud storage.
+	 * @param uploadId - ID of the upload to delete
+	 */
+	async deleteUpload(uploadId: string): Promise<void> {
+		const { error } = await auth.supabase.functions.invoke('delete-upload', {
+			body: { uploadId },
+		});
+
+		if (error) {
+			throw new Error(error.message || 'Failed to delete upload');
+		}
+
+		// Remove from local list
+		this.uploads = this.uploads.filter(u => u.id !== uploadId);
+		
+		// Refresh auth profile to update storage usage
+		await auth.loadProfile();
+	}
+
+	/**
+	 * Delete a clip from cloud storage.
+	 * @param clipId - ID of the clip to delete
+	 */
+	async deleteClip(clipId: string): Promise<void> {
+		const { error } = await auth.supabase.functions.invoke('delete-clip', {
+			body: { 
+				clipId,
+				deviceId: this.deviceId,
+			},
+		});
+
+		if (error) {
+			throw new Error(error.message || 'Failed to delete clip');
+		}
+
+		// Remove from local list
+		this.userClips = this.userClips.filter(c => c.id !== clipId);
+		
+		// Refresh auth profile to update storage usage
+		await auth.loadProfile();
+	}
 }
 
 export const cloudStorage = new CloudStorageStore();

@@ -1,17 +1,58 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/core";
-	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Calendar as CalendarIcon, RefreshCw, Database } from "@lucide/svelte";
+	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Clock, RefreshCw, Database } from "@lucide/svelte";
 	import { getCharacterName, getStageName } from "$lib/utils/characters";
 	import CharacterIcon from "$lib/components/recordings/CharacterIcon.svelte";
 	import StageIcon from "$lib/components/recordings/StageIcon.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import * as Card from "$lib/components/ui/card";
 	import * as Select from "$lib/components/ui/select";
-	import * as Popover from "$lib/components/ui/popover";
-	import { Calendar } from "$lib/components/ui/calendar";
 	import { formatDecimal } from "$lib/utils/format";
-	import { CalendarDate, type DateValue } from "@internationalized/date";
 	import { settings } from "$lib/stores/settings.svelte";
+
+	// Time range options
+	type TimeRange = "" | "today" | "week" | "month" | "3months" | "year";
+	const timeRangeOptions: { value: TimeRange; label: string }[] = [
+		{ value: "", label: "All Time" },
+		{ value: "today", label: "Today" },
+		{ value: "week", label: "Last Week" },
+		{ value: "month", label: "Last Month" },
+		{ value: "3months", label: "Last 3 Months" },
+		{ value: "year", label: "Last Year" },
+	];
+
+	function getTimeRangeFilter(range: TimeRange): { startTime?: string; endTime?: string } {
+		if (!range) return {};
+		
+		const now = new Date();
+		const endTime = now.toISOString();
+		let startDate: Date;
+		
+		switch (range) {
+			case "today":
+				startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+				break;
+			case "week":
+				startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+				break;
+			case "month":
+				startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+				break;
+			case "3months":
+				startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+				break;
+			case "year":
+				startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+				break;
+			default:
+				return {};
+		}
+		
+		return {
+			startTime: startDate.toISOString(),
+			endTime,
+		};
+	}
 
 	interface AggregatedStats {
 		totalGames: number;
@@ -64,8 +105,7 @@
 	let opponentCharacterFilter = $state<string | undefined>(undefined);
 	let playerCharacterFilter = $state<string | undefined>(undefined);
 	let stageFilter = $state<string | undefined>(undefined);
-	let startDateValue = $state<DateValue | undefined>(undefined);
-	let endDateValue = $state<DateValue | undefined>(undefined);
+	let timeRangeFilter = $state<TimeRange>("");
 
 	// Derived: available characters and stages from filter options
 	let availablePlayerCharacters = $derived(
@@ -90,12 +130,15 @@
 	);
 
 	// Build filter object from state
-	let currentFilter = $derived<StatsFilter>({
-		opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
-		playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
-		stageId: stageFilter ? parseInt(stageFilter) : undefined,
-		startTime: startDateValue ? `${startDateValue.year}-${String(startDateValue.month).padStart(2, '0')}-${String(startDateValue.day).padStart(2, '0')}T00:00:00` : undefined,
-		endTime: endDateValue ? `${endDateValue.year}-${String(endDateValue.month).padStart(2, '0')}-${String(endDateValue.day).padStart(2, '0')}T23:59:59` : undefined,
+	let currentFilter = $derived.by<StatsFilter>(() => {
+		const timeFilter = getTimeRangeFilter(timeRangeFilter);
+		return {
+			opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
+			playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
+			stageId: stageFilter ? parseInt(stageFilter) : undefined,
+			startTime: timeFilter.startTime,
+			endTime: timeFilter.endTime,
+		};
 	});
 
 	// Check if any filters are active (empty string counts as no filter)
@@ -103,8 +146,7 @@
 		(opponentCharacterFilter !== undefined && opponentCharacterFilter !== "") ||
 		(playerCharacterFilter !== undefined && playerCharacterFilter !== "") ||
 		(stageFilter !== undefined && stageFilter !== "") ||
-		startDateValue !== undefined ||
-		endDateValue !== undefined
+		timeRangeFilter !== ""
 	);
 
 	// Historical sync state
@@ -189,17 +231,11 @@
 		opponentCharacterFilter = undefined;
 		playerCharacterFilter = undefined;
 		stageFilter = undefined;
-		startDateValue = undefined;
-		endDateValue = undefined;
+		timeRangeFilter = "";
 	}
 
 	function applyFilters() {
 		loadStats();
-	}
-
-	function formatDateValue(dv: DateValue | undefined): string {
-		if (!dv) return "Pick a date";
-		return `${dv.month}/${dv.day}/${dv.year}`;
 	}
 
 	async function syncHistoricalData() {
@@ -405,39 +441,22 @@
 					</Select.Root>
 				</div>
 
-				<!-- Date Range -->
+				<!-- Time Range -->
 				<div class="space-y-1.5">
-					<span class="text-xs font-medium text-muted-foreground">From</span>
-					<Popover.Root>
-						<Popover.Trigger>
-							{#snippet child({ props })}
-								<Button variant="outline" class="w-32 justify-start text-left font-normal h-9" {...props}>
-									<CalendarIcon class="mr-2 size-3" />
-									<span class="text-xs">{formatDateValue(startDateValue)}</span>
-								</Button>
-							{/snippet}
-						</Popover.Trigger>
-						<Popover.Content class="w-auto p-0">
-							<Calendar type="single" bind:value={startDateValue} />
-						</Popover.Content>
-					</Popover.Root>
-				</div>
-
-				<div class="space-y-1.5">
-					<span class="text-xs font-medium text-muted-foreground">To</span>
-					<Popover.Root>
-						<Popover.Trigger>
-							{#snippet child({ props })}
-								<Button variant="outline" class="w-32 justify-start text-left font-normal h-9" {...props}>
-									<CalendarIcon class="mr-2 size-3" />
-									<span class="text-xs">{formatDateValue(endDateValue)}</span>
-								</Button>
-							{/snippet}
-						</Popover.Trigger>
-						<Popover.Content class="w-auto p-0">
-							<Calendar type="single" bind:value={endDateValue} />
-						</Popover.Content>
-					</Popover.Root>
+					<span class="text-xs font-medium text-muted-foreground">Time Range</span>
+					<Select.Root type="single" bind:value={timeRangeFilter}>
+						<Select.Trigger class="w-36">
+							<div class="flex items-center gap-2">
+								<Clock class="size-3 text-muted-foreground" />
+								<span>{timeRangeOptions.find(o => o.value === timeRangeFilter)?.label ?? "All Time"}</span>
+							</div>
+						</Select.Trigger>
+						<Select.Content>
+							{#each timeRangeOptions as option}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 
 				<!-- Actions -->

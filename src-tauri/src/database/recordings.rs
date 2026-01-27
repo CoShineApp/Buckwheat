@@ -40,6 +40,8 @@ pub struct GameStatsRow {
     pub total_frames: Option<i32>,
     pub is_pal: Option<bool>,
     pub played_on: Option<String>,
+    /// ISO 8601 timestamp when game was played
+    pub created_at: Option<String>,
     /// Path to .slp file - used for deduplication of historical games
     pub slp_path: Option<String>,
 }
@@ -146,7 +148,7 @@ pub fn get_recordings_paginated(
                 g.player1_id, g.player2_id, g.player1_port, g.player2_port,
                 g.player1_character, g.player2_character, g.player1_color, g.player2_color,
                 g.winner_port, g.loser_port, g.stage, g.game_duration, g.total_frames,
-                g.is_pal, g.played_on, g.slp_path
+                g.is_pal, g.played_on, g.created_at, g.slp_path
          FROM recordings r
          LEFT JOIN game_stats g ON r.id = g.id
          ORDER BY r.start_time DESC
@@ -186,7 +188,8 @@ pub fn get_recordings_paginated(
                 total_frames: row.get(21)?,
                 is_pal: row.get::<_, Option<i32>>(22)?.map(|v| v != 0),
                 played_on: row.get(23)?,
-                slp_path: row.get(24)?,
+                created_at: row.get(24)?,
+                slp_path: row.get(25)?,
             })
         } else {
             None
@@ -356,8 +359,8 @@ pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::R
         "INSERT INTO game_stats (id, player1_id, player2_id, player1_port, player2_port,
                                   player1_character, player2_character, player1_color, player2_color,
                                   winner_port, loser_port, stage, game_duration, total_frames,
-                                  is_pal, played_on, slp_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                                  is_pal, played_on, created_at, slp_path)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(id) DO UPDATE SET
             player1_id = excluded.player1_id,
             player2_id = excluded.player2_id,
@@ -374,6 +377,7 @@ pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::R
             total_frames = excluded.total_frames,
             is_pal = excluded.is_pal,
             played_on = excluded.played_on,
+            created_at = excluded.created_at,
             slp_path = excluded.slp_path",
         params![
             stats.id,
@@ -392,6 +396,7 @@ pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::R
             stats.total_frames,
             stats.is_pal.map(|b| b as i32),
             stats.played_on,
+            stats.created_at,
             stats.slp_path,
         ],
     )?;
@@ -622,6 +627,28 @@ pub fn get_aggregated_player_stats(
 ) -> rusqlite::Result<AggregatedPlayerStats> {
     let filter = filter.unwrap_or_default();
     
+    // Debug: count how many player_stats exist for this connect code
+    let total_player_stats: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM player_stats WHERE connect_code = ?",
+        [connect_code],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    let total_game_stats: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM game_stats",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    let joined_count: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM player_stats p JOIN game_stats g ON p.recording_id = g.id WHERE p.connect_code = ?",
+        [connect_code],
+        |row| row.get(0),
+    ).unwrap_or(0);
+    
+    log::info!("[TotalStats] connect_code={}, player_stats={}, game_stats={}, joined={}", 
+        connect_code, total_player_stats, total_game_stats, joined_count);
+    
     // Build dynamic WHERE clause for filters
     let mut where_clauses = vec!["p.connect_code = ?1".to_string()];
     let mut param_idx = 2;
@@ -636,13 +663,13 @@ pub fn get_aggregated_player_stats(
     }
     
     if let Some(start) = &filter.start_time {
-        where_clauses.push(format!("g.played_on >= ?{}", param_idx));
+        where_clauses.push(format!("g.created_at >= ?{}", param_idx));
         params_vec.push(Box::new(start.clone()));
         param_idx += 1;
     }
     
     if let Some(end) = &filter.end_time {
-        where_clauses.push(format!("g.played_on <= ?{}", param_idx));
+        where_clauses.push(format!("g.created_at <= ?{}", param_idx));
         params_vec.push(Box::new(end.clone()));
         param_idx += 1;
     }
@@ -669,11 +696,16 @@ pub fn get_aggregated_player_stats(
     let where_clause = where_clauses.join(" AND ");
     
     // 1. Overall stats
-    // Winner is determined by game_stats.winner_port matching player's port
+    // Winner is determined by matching connect code to the winning player's ID in game_stats
+    // If winner_port=1 and player1_id=connect_code, player won. Same for port 2.
     let overall_query = format!(
         "SELECT 
             COUNT(*) as total_games,
-            SUM(CASE WHEN g.winner_port = p.port THEN 1 ELSE 0 END) as total_wins,
+            SUM(CASE 
+                WHEN (g.winner_port = 1 AND g.player1_id = p.connect_code) THEN 1
+                WHEN (g.winner_port = 2 AND g.player2_id = p.connect_code) THEN 1
+                ELSE 0 
+            END) as total_wins,
             AVG(
                 CAST(p.l_cancel_success_count AS FLOAT) / 
                 NULLIF(p.l_cancel_success_count + p.l_cancel_fail_count, 0)
@@ -689,6 +721,9 @@ pub fn get_aggregated_player_stats(
          WHERE {}",
         opponent_join, where_clause
     );
+    
+    log::debug!("[TotalStats] Query: {}", overall_query);
+    log::debug!("[TotalStats] Where clause: {}", where_clause);
     
     let mut stmt = conn.prepare(&overall_query)?;
     
@@ -720,14 +755,18 @@ pub fn get_aggregated_player_stats(
     )?;
 
     // 2. Character stats (opponents faced) - with filters applied
-    // Winner determined by game_stats.winner_port matching player's port
+    // Winner determined by matching connect code to winning player's ID
     // Note: This query already has 'opp' joined, so replace opp_filter reference with opp
     let character_where = where_clause.replace("opp_filter.character_id", "opp.character_id");
     let character_query = format!(
         "SELECT 
             opp.character_id,
             COUNT(*) as games,
-            SUM(CASE WHEN g.winner_port = p.port THEN 1 ELSE 0 END) as wins
+            SUM(CASE 
+                WHEN (g.winner_port = 1 AND g.player1_id = p.connect_code) THEN 1
+                WHEN (g.winner_port = 2 AND g.player2_id = p.connect_code) THEN 1
+                ELSE 0 
+            END) as wins
          FROM player_stats p
          JOIN game_stats g ON p.recording_id = g.id
          JOIN player_stats opp ON p.recording_id = opp.recording_id AND opp.player_index != p.player_index
@@ -748,12 +787,16 @@ pub fn get_aggregated_player_stats(
     })?.collect::<Result<Vec<_>, _>>()?;
 
     // 3. Stage stats - with filters applied
-    // Winner determined by game_stats.winner_port matching player's port
+    // Winner determined by matching connect code to winning player's ID
     let stage_query = format!(
         "SELECT 
             g.stage,
             COUNT(*) as games,
-            SUM(CASE WHEN g.winner_port = p.port THEN 1 ELSE 0 END) as wins
+            SUM(CASE 
+                WHEN (g.winner_port = 1 AND g.player1_id = p.connect_code) THEN 1
+                WHEN (g.winner_port = 2 AND g.player2_id = p.connect_code) THEN 1
+                ELSE 0 
+            END) as wins
          FROM player_stats p
          JOIN game_stats g ON p.recording_id = g.id
          {}

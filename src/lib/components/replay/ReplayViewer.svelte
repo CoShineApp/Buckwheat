@@ -170,8 +170,8 @@ async function handleApplyChanges() {
 			}
 		}
 		
-		// Call backend to apply edits
-		const result = await invoke<string>('apply_video_edit', {
+		// Call backend to create clip with edits
+		const clipPath = await invoke<string>('apply_video_edit', {
 			inputPath: videoPath,
 			trimStart: trimRange.start,
 			trimEnd: trimRange.end,
@@ -179,19 +179,19 @@ async function handleApplyChanges() {
 			cropY,
 			cropWidth,
 			cropHeight,
-			replaceOriginal: true,
+			replaceOriginal: false, // Always create a new clip
 		});
 		
-		console.log('✅ Video edit applied:', result);
+		console.log('✅ Clip created:', clipPath);
 		
-		// Reset edit mode and refresh
+		// Reset edit mode
 		handleEditModeChange(false);
 		
-		// Force reload of the recording to show updated video
-		await recordingsStore.refresh();
+		// Navigate to clips tab to see the new clip
+		navigation.navigateToClips();
 		
 	} catch (error) {
-		console.error('❌ Failed to apply video edit:', error);
+		console.error('❌ Failed to create clip:', error);
 	} finally {
 		isProcessing = false;
 	}

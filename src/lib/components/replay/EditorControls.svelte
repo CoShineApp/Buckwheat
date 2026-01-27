@@ -153,8 +153,8 @@
 		<div class="flex items-center gap-3">
 			<Loader2 class="size-6 animate-spin text-primary" />
 			<div>
-				<h3 class="text-sm font-semibold text-foreground">Processing Video</h3>
-				<p class="text-xs text-muted-foreground">Please wait while changes are applied...</p>
+				<h3 class="text-sm font-semibold text-foreground">Creating Clip</h3>
+				<p class="text-xs text-muted-foreground">Please wait while your clip is being created...</p>
 			</div>
 		</div>
 		
@@ -175,15 +175,15 @@
 	</div>
 {:else if showConfirmation}
 	<!-- Confirmation step - review changes before applying -->
-	<div class="flex flex-col gap-3 rounded-lg border border-amber-500/50 bg-card p-3">
+	<div class="flex flex-col gap-3 rounded-lg border border-primary/50 bg-card p-3">
 		<!-- Header -->
 		<div class="flex items-center gap-2">
-			<AlertTriangle class="size-5 text-amber-500" />
-			<h3 class="text-sm font-semibold text-foreground">Review Changes</h3>
+			<Film class="size-5 text-primary" />
+			<h3 class="text-sm font-semibold text-foreground">Create Clip</h3>
 		</div>
 
 		<p class="text-xs text-muted-foreground">
-			The following changes will be permanently applied to the original video file:
+			A new clip will be created with the following edits (original video is preserved):
 		</p>
 
 		<!-- Summary of changes -->
@@ -221,8 +221,8 @@
 			{/if}
 		</div>
 
-		<p class="text-xs text-amber-500/80">
-			This action cannot be undone.
+		<p class="text-xs text-primary/80">
+			The clip will be saved to your Clips folder.
 		</p>
 
 		<!-- Action Buttons -->
@@ -242,8 +242,8 @@
 				onclick={handleConfirmApply}
 				class="flex-1 gap-1"
 			>
-				<Check class="size-4" />
-				Confirm & Process
+				<Film class="size-4" />
+				Create Clip
 			</Button>
 		</div>
 	</div>

@@ -176,6 +176,32 @@ Deno.serve(async (req) => {
     }
     console.log('✅ Clip record created:', clip.id)
 
+    // Step 10: Update storage usage for authenticated users
+    if (userId) {
+      console.log('🔧 Step 10: Updating storage usage')
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('storage_used')
+        .eq('id', userId)
+        .single()
+
+      if (profile) {
+        const newUsage = (profile.storage_used || 0) + fileSize
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ storage_used: newUsage })
+          .eq('id', userId)
+
+        if (updateError) {
+          console.error('⚠️ Failed to update storage usage:', updateError)
+        } else {
+          console.log(`✅ Storage updated: ${(profile.storage_used / 1024 / 1024).toFixed(2)} MB → ${(newUsage / 1024 / 1024).toFixed(2)} MB`)
+        }
+      }
+    } else {
+      console.log('ℹ️ Skipping storage update (anonymous upload)')
+    }
+
     console.log('✅ Success! Returning response')
     return new Response(JSON.stringify({ uploadUrl, clip, shareCode }), {
       status: 200,

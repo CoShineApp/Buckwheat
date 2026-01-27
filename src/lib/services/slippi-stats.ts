@@ -229,6 +229,17 @@ export async function parseSlippiStats(
 			}
 		}
 
+		// Parse created_at from metadata.startAt or filename (format: Game_20260126T170709.slp)
+		let createdAt: string | null = metadata?.startAt ?? null;
+		if (!createdAt) {
+			// Try to parse from filename
+			const filenameMatch = slpPath.match(/Game_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.slp$/);
+			if (filenameMatch) {
+				const [, year, month, day, hour, minute, second] = filenameMatch;
+				createdAt = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+			}
+		}
+
 		// Build the complete game stats
 		const gameStats: GameStatsForDB = {
 			recordingId,
@@ -242,6 +253,7 @@ export async function parseSlippiStats(
 			playedOn: metadata?.playedOn ?? null,
 			matchId: settings.matchInfo?.matchId ?? null,
 			gameNumber: settings.matchInfo?.gameNumber ?? null,
+			createdAt,
 
 			// Outcome
 			winnerIndex,

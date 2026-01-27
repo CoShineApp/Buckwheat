@@ -5,7 +5,7 @@
 use rusqlite::Connection;
 
 /// Current schema version - bump this to force a recreate
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 
 /// Initialize the database schema
 /// Drops and recreates all tables if version doesn't match
@@ -123,6 +123,9 @@ fn recreate_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             game_number INTEGER,
             game_end_method TEXT,
             
+            -- Timestamps
+            created_at TEXT,  -- ISO 8601 timestamp when game was played
+            
             -- For deduplication of historical games
             slp_path TEXT UNIQUE
         );
@@ -133,6 +136,7 @@ fn recreate_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
         CREATE INDEX idx_game_stats_characters ON game_stats(player1_character, player2_character);
         CREATE INDEX idx_game_stats_stage ON game_stats(stage);
         CREATE INDEX idx_game_stats_slp_path ON game_stats(slp_path);
+        CREATE INDEX idx_game_stats_created_at ON game_stats(created_at DESC);
         
         -- Player stats table (one-to-many: one game has multiple players)
         CREATE TABLE player_stats (

@@ -5,10 +5,11 @@
 	import { cloudStorage } from '$lib/stores/cloud-storage.svelte';
 	import { navigation } from '$lib/stores/navigation.svelte';
 	import { formatDuration, formatFileSize } from '$lib/utils/format';
-	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink } from '@lucide/svelte';
+	import { Play, Share2, Trash2, RefreshCw, Scissors, Copy, ExternalLink, Cloud, Loader2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+	import { listen } from '@tauri-apps/api/event';
 
 	let isDeleting = $state<string | null>(null);
 	let isUploading = $state<string | null>(null);
@@ -18,6 +19,16 @@
 		clipsStore.refresh();
 		// Also load cloud clips to check which are already uploaded
 		cloudStorage.refreshUserClips();
+		
+		// Listen for new clips created
+		const unsubscribe = listen<string[]>('clip:created', () => {
+			console.log('📢 clip:created event received, refreshing clips...');
+			clipsStore.refresh();
+		});
+		
+		return () => {
+			unsubscribe.then(fn => fn());
+		};
 	});
 
 	function handlePlay(clip: ClipSession) {

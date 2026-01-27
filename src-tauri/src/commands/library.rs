@@ -139,6 +139,9 @@ pub struct ComputedGameStats {
     pub match_id: Option<String>,
     pub game_number: Option<i32>,
     
+    // Timestamp when game was played (ISO 8601)
+    pub created_at: Option<String>,
+    
     // Outcome
     pub winner_index: Option<i32>,
     pub loser_index: Option<i32>,
@@ -260,6 +263,7 @@ pub async fn save_computed_stats(
         total_frames: Some(stats.total_frames),
         is_pal: Some(stats.is_pal),
         played_on: stats.played_on.clone(),
+        created_at: stats.created_at.clone(),
         slp_path: Some(stats.slp_path.clone()),
     };
     
