@@ -98,12 +98,74 @@ class RecordingsStore {
 			this.totalRecordings = response.total;
 			
 			console.log(`✅ Loaded ${this.recordings.length} recordings (page ${response.page}/${response.total_pages}, total: ${response.total})`);
+			
+			// Parse stats for recordings that are missing metadata (in background)
+			this.parseStatsForMissingRecordings();
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : "Failed to fetch recordings";
 			console.error("Failed to fetch recordings:", e);
 			this.recordings = [];
 		} finally {
 			this.isLoading = false;
+		}
+	}
+	
+	/** Whether we're currently parsing missing stats (to prevent recursive refresh) */
+	private isParsingMissingStats = false;
+	
+	/**
+	 * Parse and save stats for recordings that are missing slippi_metadata.
+	 * Runs in background without blocking the UI.
+	 */
+	private async parseStatsForMissingRecordings() {
+		// Prevent recursive calls from the refresh after parsing
+		if (this.isParsingMissingStats) {
+			return;
+		}
+		
+		// Find recordings with slp_path but no slippi_metadata (or no players)
+		const needsParsing = this.recordings.filter(rec => 
+			rec.slp_path && 
+			(!rec.slippi_metadata || !rec.slippi_metadata.players || rec.slippi_metadata.players.length === 0)
+		);
+		
+		if (needsParsing.length === 0) {
+			return;
+		}
+		
+		console.log(`[SlippiStats] Found ${needsParsing.length} recordings missing stats, parsing in background...`);
+		this.isParsingMissingStats = true;
+		
+		try {
+			// Import slippi-stats service
+			const { parseAndSaveSlippiStats } = await import("$lib/services/slippi-stats");
+			
+			// Limit to first 10 recordings to avoid blocking on large libraries
+			const toParse = needsParsing.slice(0, 10);
+			if (needsParsing.length > 10) {
+				console.log(`[SlippiStats] Only parsing first 10 of ${needsParsing.length} recordings (others will parse on next refresh)`);
+			}
+			
+			// Parse each recording (don't await all at once to avoid overwhelming)
+			let successCount = 0;
+			for (const rec of toParse) {
+				try {
+					const success = await parseAndSaveSlippiStats(rec.slp_path!, rec.id);
+					if (success) {
+						successCount++;
+					}
+				} catch (error) {
+					console.warn(`[SlippiStats] Failed to parse stats for ${rec.id}:`, error);
+				}
+			}
+			
+			if (successCount > 0) {
+				console.log(`[SlippiStats] Successfully parsed ${successCount}/${needsParsing.length} recordings`);
+				// Refresh to show the new metadata
+				await this.refresh();
+			}
+		} finally {
+			this.isParsingMissingStats = false;
 		}
 	}
 

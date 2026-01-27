@@ -215,13 +215,32 @@ pub async fn save_computed_stats(
     let p1 = stats.players.get(0);
     let p2 = stats.players.get(1);
     
-    // Determine winner by kill_count = 4 (took all stocks)
-    let winner_port = stats.players.iter()
-        .find(|p| p.kill_count == 4)
-        .map(|p| p.port);
-    let loser_port = stats.players.iter()
-        .find(|p| p.kill_count != 4)
-        .map(|p| p.port);
+    // Determine winner by stocks remaining:
+    // 1. If one player has 0 stocks, the other wins
+    // 2. If both have stocks, the one with MORE stocks wins
+    // 3. If tied stocks, no winner (LRAS quit or timeout)
+    let (winner_port, loser_port) = if stats.players.len() == 2 {
+        let player_a = &stats.players[0];
+        let player_b = &stats.players[1];
+        
+        let a_stocks = player_a.stocks_remaining;
+        let b_stocks = player_b.stocks_remaining;
+        
+        if a_stocks > b_stocks {
+            // Player A has more stocks = winner
+            (Some(player_a.port), Some(player_b.port))
+        } else if b_stocks > a_stocks {
+            // Player B has more stocks = winner
+            (Some(player_b.port), Some(player_a.port))
+        } else {
+            // Tied stocks - no winner (probably LRAS quit with same stocks)
+            log::warn!("[SlippiStats] No winner: tied stocks ({}) for {}", a_stocks, stats.recording_id);
+            (None, None)
+        }
+    } else {
+        log::error!("[SlippiStats] Expected 2 players for {}, got {}", stats.recording_id, stats.players.len());
+        (None, None)
+    };
     
     // Build and upsert game_stats (creates if missing, updates if exists)
     let game_stats = database::GameStatsRow {
@@ -241,6 +260,7 @@ pub async fn save_computed_stats(
         total_frames: Some(stats.total_frames),
         is_pal: Some(stats.is_pal),
         played_on: stats.played_on.clone(),
+        slp_path: Some(stats.slp_path.clone()),
     };
     
     database::upsert_game_stats(&conn, &game_stats)
@@ -288,6 +308,7 @@ pub async fn save_computed_stats(
             l_cancel_fail_count: player.l_cancel_fail_count,
             stocks_remaining: player.stocks_remaining,
             final_percent: player.final_percent,
+            slp_path: Some(stats.slp_path.clone()),
         };
         
         database::upsert_player_stats(&conn, &player_stats)
@@ -343,13 +364,54 @@ pub async fn get_total_player_stats(
 /// Get available filter options (connect codes, characters, stages) from the database
 #[tauri::command]
 pub async fn get_available_filter_options(
+    connect_code: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<AvailableFilterOptions, Error> {
     let db = state.database.clone();
     let conn = db.connection();
     
-    database::get_available_filter_options(&conn)
+    database::get_available_filter_options(&conn, connect_code.as_deref())
         .map_err(|e| Error::RecordingFailed(format!("Failed to get filter options: {}", e)))
+}
+
+/// List all .slp files in a directory (recursive, up to 5 levels deep)
+#[tauri::command]
+pub async fn list_slp_files(directory: String) -> Result<Vec<String>, Error> {
+    use walkdir::WalkDir;
+    
+    let dir_path = std::path::Path::new(&directory);
+    if !dir_path.exists() {
+        return Err(Error::InvalidPath(format!("Directory does not exist: {}", directory)));
+    }
+    
+    let mut slp_files = Vec::new();
+    
+    for entry in WalkDir::new(&directory)
+        .max_depth(5)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("slp") {
+            slp_files.push(path.to_string_lossy().to_string());
+        }
+    }
+    
+    log::info!("Found {} .slp files in {}", slp_files.len(), directory);
+    Ok(slp_files)
+}
+
+/// Check if a game with the given slp_path already exists in the database
+#[tauri::command]
+pub async fn check_slp_synced(
+    slp_path: String,
+    state: State<'_, AppState>,
+) -> Result<bool, Error> {
+    let db = state.database.clone();
+    let conn = db.connection();
+    
+    database::game_stats_exists_by_slp_path(&conn, &slp_path)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to check slp sync status: {}", e)))
 }
 
 /// Open a video file in the default player

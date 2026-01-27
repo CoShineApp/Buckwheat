@@ -43,6 +43,9 @@ export type Settings = {
 	createClipHotkey: string;
 	/** Duration in seconds for clips */
 	clipDuration: number;
+
+	/** User's Slippi connect code (e.g., "HATS#982") */
+	slippiCode: string;
 };
 
 /** Default settings values */
@@ -55,6 +58,7 @@ const DEFAULT_SETTINGS: Settings = {
 	watchForGames: true,
 	createClipHotkey: "F9",
 	clipDuration: 30,
+	slippiCode: "",
 };
 
 /**
@@ -82,6 +86,8 @@ class SettingsStore {
 	createClipHotkey = $state("F9");
 	/** Clip duration in seconds */
 	clipDuration = $state(30);
+	/** User's Slippi connect code */
+	slippiCode = $state("");
 
 	/** Whether settings are currently loading */
 	isLoading = $state(true);
@@ -121,6 +127,7 @@ class SettingsStore {
 		this.watchForGames = settings.watchForGames;
 		this.createClipHotkey = settings.createClipHotkey;
 		this.clipDuration = settings.clipDuration;
+		this.slippiCode = settings.slippiCode;
 	}
 
 	/** Reset reactive state to default values */
@@ -133,6 +140,7 @@ class SettingsStore {
 		this.watchForGames = DEFAULT_SETTINGS.watchForGames;
 		this.createClipHotkey = DEFAULT_SETTINGS.createClipHotkey;
 		this.clipDuration = DEFAULT_SETTINGS.clipDuration;
+		this.slippiCode = DEFAULT_SETTINGS.slippiCode;
 	}
 
 	/** Get all settings from persistent store */
@@ -148,6 +156,7 @@ class SettingsStore {
 			watchForGames: ((await this.store.get("watchForGames")) as boolean) ?? DEFAULT_SETTINGS.watchForGames,
 			createClipHotkey: ((await this.store.get("createClipHotkey")) as string) ?? DEFAULT_SETTINGS.createClipHotkey,
 			clipDuration: ((await this.store.get("clipDuration")) as number) ?? DEFAULT_SETTINGS.clipDuration,
+			slippiCode: ((await this.store.get("slippiCode")) as string) ?? DEFAULT_SETTINGS.slippiCode,
 		};
 	}
 
@@ -184,6 +193,9 @@ class SettingsStore {
 			case "clipDuration":
 				this.clipDuration = value as number;
 				break;
+			case "slippiCode":
+				this.slippiCode = value as string;
+				break;
 		}
 		
 		// Persist to store if available
@@ -209,6 +221,7 @@ class SettingsStore {
 			"watchForGames",
 			"createClipHotkey",
 			"clipDuration",
+			"slippiCode",
 		];
 
 		for (const key of keys) {

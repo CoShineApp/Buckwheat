@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/core";
-	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Calendar as CalendarIcon } from "@lucide/svelte";
+	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Calendar as CalendarIcon, RefreshCw, Database } from "@lucide/svelte";
 	import { getCharacterName, getStageName } from "$lib/utils/characters";
 	import CharacterIcon from "$lib/components/recordings/CharacterIcon.svelte";
 	import StageIcon from "$lib/components/recordings/StageIcon.svelte";
@@ -11,6 +11,7 @@
 	import { Calendar } from "$lib/components/ui/calendar";
 	import { formatDecimal } from "$lib/utils/format";
 	import { CalendarDate, type DateValue } from "@internationalized/date";
+	import { settings } from "$lib/stores/settings.svelte";
 
 	interface AggregatedStats {
 		totalGames: number;
@@ -54,8 +55,10 @@
 	let filterOptions = $state<AvailableFilterOptions | null>(null);
 	let filterOptionsLoading = $state(true);
 
-	// Selected player (connect code)
-	let selectedPlayer = $state<string | undefined>(undefined);
+	// User's Slippi code (loaded from/saved to settings)
+	let slippiCode = $state<string>(settings.slippiCode ?? "");
+	let slippiCodeInput = $state<string>(settings.slippiCode ?? "");
+	let isEditingCode = $state(!settings.slippiCode);
 
 	// Filter state
 	let opponentCharacterFilter = $state<string | undefined>(undefined);
@@ -86,8 +89,6 @@
 		})).sort((a, b) => a.name.localeCompare(b.name)) ?? []
 	);
 
-	let availablePlayers = $derived(filterOptions?.connectCodes ?? []);
-
 	// Build filter object from state
 	let currentFilter = $derived<StatsFilter>({
 		opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
@@ -97,14 +98,19 @@
 		endTime: endDateValue ? `${endDateValue.year}-${String(endDateValue.month).padStart(2, '0')}-${String(endDateValue.day).padStart(2, '0')}T23:59:59` : undefined,
 	});
 
-	// Check if any filters are active
+	// Check if any filters are active (empty string counts as no filter)
 	let hasActiveFilters = $derived(
-		opponentCharacterFilter !== undefined ||
-		playerCharacterFilter !== undefined ||
-		stageFilter !== undefined ||
+		(opponentCharacterFilter !== undefined && opponentCharacterFilter !== "") ||
+		(playerCharacterFilter !== undefined && playerCharacterFilter !== "") ||
+		(stageFilter !== undefined && stageFilter !== "") ||
 		startDateValue !== undefined ||
 		endDateValue !== undefined
 	);
+
+	// Historical sync state
+	let isSyncing = $state(false);
+	let syncProgress = $state({ current: 0, total: 0, skipped: 0 });
+	let syncError = $state<string | null>(null);
 
 	// Derived sorted stats to avoid mutating state in template
 	let sortedCharacterStats = $derived(
@@ -115,26 +121,24 @@
 		stats?.stageStats ? [...stats.stageStats].sort((a, b) => b.games - a.games) : []
 	);
 
-	// Load filter options on mount
+	// Load filter options when slippi code changes
 	$effect(() => {
-		loadFilterOptions();
+		loadFilterOptions(slippiCode || undefined);
 	});
 
-	// Load stats when player changes
+	// Load stats when slippi code changes
 	$effect(() => {
-		if (selectedPlayer) {
+		if (slippiCode) {
 			loadStats();
 		}
 	});
 
-	async function loadFilterOptions() {
+	async function loadFilterOptions(connectCode?: string) {
 		filterOptionsLoading = true;
 		try {
-			filterOptions = await invoke<AvailableFilterOptions>("get_available_filter_options");
-			// Auto-select first player if available
-			if (filterOptions.connectCodes.length > 0 && !selectedPlayer) {
-				selectedPlayer = filterOptions.connectCodes[0];
-			}
+			filterOptions = await invoke<AvailableFilterOptions>("get_available_filter_options", {
+				connectCode: connectCode || null
+			});
 		} catch (e) {
 			console.error("Failed to load filter options:", e);
 		} finally {
@@ -143,7 +147,7 @@
 	}
 
 	async function loadStats() {
-		if (!selectedPlayer) return;
+		if (!slippiCode) return;
 		
 		loading = true;
 		error = null;
@@ -151,7 +155,7 @@
 			const filterToSend = hasActiveFilters ? currentFilter : null;
 			
 			stats = await invoke<AggregatedStats>("get_total_player_stats", {
-				connectCode: selectedPlayer,
+				connectCode: slippiCode,
 				filter: filterToSend
 			});
 		} catch (e) {
@@ -160,6 +164,20 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function saveSlippiCode() {
+		const code = slippiCodeInput.trim().toUpperCase();
+		if (code) {
+			slippiCode = code;
+			await settings.set("slippiCode", code);
+			isEditingCode = false;
+		}
+	}
+
+	function editSlippiCode() {
+		slippiCodeInput = slippiCode;
+		isEditingCode = true;
 	}
 
 	function getWinRate(wins: number, games: number): string {
@@ -183,32 +201,127 @@
 		if (!dv) return "Pick a date";
 		return `${dv.month}/${dv.day}/${dv.year}`;
 	}
+
+	async function syncHistoricalData() {
+		const slippiPath = settings.slippiPath;
+		if (!slippiPath) {
+			syncError = "Slippi directory not configured in settings";
+			return;
+		}
+
+		isSyncing = true;
+		syncError = null;
+		syncProgress = { current: 0, total: 0, skipped: 0 };
+
+		try {
+			// Get list of all .slp files
+			const slpFiles: string[] = await invoke("list_slp_files", { directory: slippiPath });
+			syncProgress.total = slpFiles.length;
+
+			if (slpFiles.length === 0) {
+				syncError = "No .slp files found in directory";
+				isSyncing = false;
+				return;
+			}
+
+			// Import slippi-js parsing function
+			const { parseAndSaveSlippiStats } = await import("$lib/services/slippi-stats");
+
+			// Process each file
+			for (let i = 0; i < slpFiles.length; i++) {
+				const slpPath = slpFiles[i];
+				syncProgress.current = i + 1;
+
+				// Check if already synced
+				const alreadySynced: boolean = await invoke("check_slp_synced", { slpPath });
+				if (alreadySynced) {
+					syncProgress.skipped++;
+					continue;
+				}
+
+				// Parse and save stats (uses slp_path as recording_id for historical games)
+				try {
+					// Generate a unique ID using crypto hash of the full path
+					const encoder = new TextEncoder();
+					const data = encoder.encode(slpPath);
+					const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+					const hashArray = Array.from(new Uint8Array(hashBuffer));
+					const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+					const recordingId = `historical-${hashHex.slice(0, 32)}`;
+					
+					await parseAndSaveSlippiStats(slpPath, recordingId);
+				} catch (e) {
+					console.warn(`Failed to parse ${slpPath}:`, e);
+					// Continue with other files
+				}
+			}
+
+			// Refresh filter options and stats after sync
+			await loadFilterOptions(slippiCode || undefined);
+			if (slippiCode) {
+				await loadStats();
+			}
+		} catch (e) {
+			console.error("Historical sync failed:", e);
+			syncError = e instanceof Error ? e.message : "Sync failed";
+		} finally {
+			isSyncing = false;
+		}
+	}
 </script>
 
 <div class="container mx-auto max-w-7xl p-6 space-y-6">
 	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<h1 class="text-3xl font-bold tracking-tight">Total Stats</h1>
-		<div class="flex items-center gap-2">
-			<span class="text-sm text-muted-foreground">Player:</span>
-			{#if filterOptionsLoading}
-				<Loader2 class="size-4 animate-spin" />
-			{:else if availablePlayers.length > 0}
-				<Select.Root type="single" bind:value={selectedPlayer}>
-					<Select.Trigger class="w-40">
-						{selectedPlayer ?? "Select player"}
-					</Select.Trigger>
-					<Select.Content>
-						{#each availablePlayers as player}
-							<Select.Item value={player}>{player}</Select.Item>
-						{/each}
-					</Select.Content>
-				</Select.Root>
-			{:else}
-				<span class="text-muted-foreground text-sm">No players found</span>
-			{/if}
+		<div class="flex items-center gap-4">
+			<!-- Sync Historical Data Button -->
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={syncHistoricalData}
+				disabled={isSyncing}
+				class="gap-2"
+			>
+				{#if isSyncing}
+					<Loader2 class="size-4 animate-spin" />
+					<span>Syncing {syncProgress.current}/{syncProgress.total}...</span>
+				{:else}
+					<Database class="size-4" />
+					<span>Sync Historical Data</span>
+				{/if}
+			</Button>
+
+			<!-- Slippi Code Input -->
+			<div class="flex items-center gap-2">
+				{#if isEditingCode}
+					<input
+						type="text"
+						bind:value={slippiCodeInput}
+						placeholder="HATS#982"
+						class="w-32 rounded-md border border-input bg-background px-3 py-1.5 text-sm uppercase placeholder:normal-case"
+						onkeydown={(e) => e.key === 'Enter' && saveSlippiCode()}
+					/>
+					<Button size="sm" onclick={saveSlippiCode}>Save</Button>
+				{:else}
+					<span class="font-medium text-lg">{slippiCode}</span>
+					<Button variant="ghost" size="sm" onclick={editSlippiCode}>Edit</Button>
+				{/if}
+			</div>
 		</div>
 	</div>
+
+	<!-- Sync Status/Error -->
+	{#if syncError}
+		<div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+			{syncError}
+		</div>
+	{/if}
+	{#if isSyncing && syncProgress.skipped > 0}
+		<div class="text-sm text-muted-foreground">
+			Skipped {syncProgress.skipped} already synced files
+		</div>
+	{/if}
 
 	<!-- Filters (always visible) -->
 	<Card.Root class="border-dashed border-2 bg-muted/30">
@@ -229,6 +342,7 @@
 							{/if}
 						</Select.Trigger>
 						<Select.Content class="max-h-60">
+							<Select.Item value="" class="text-muted-foreground">Any character</Select.Item>
 							{#each availablePlayerCharacters as char}
 								<Select.Item value={String(char.id)} class="flex items-center gap-2">
 									<CharacterIcon characterId={char.id} size="sm" />
@@ -254,6 +368,7 @@
 							{/if}
 						</Select.Trigger>
 						<Select.Content class="max-h-60">
+							<Select.Item value="" class="text-muted-foreground">Any opponent</Select.Item>
 							{#each availableOpponentCharacters as char}
 								<Select.Item value={String(char.id)} class="flex items-center gap-2">
 									<CharacterIcon characterId={char.id} size="sm" />
@@ -279,6 +394,7 @@
 							{/if}
 						</Select.Trigger>
 						<Select.Content>
+							<Select.Item value="" class="text-muted-foreground">Any stage</Select.Item>
 							{#each availableStages as stage}
 								<Select.Item value={String(stage.id)} class="flex items-center gap-2">
 									<StageIcon stageId={stage.id} size="sm" />
@@ -352,7 +468,7 @@
 			<p class="text-muted-foreground max-w-md text-center">{error}</p>
 			<Button variant="outline" onclick={loadStats}>Try Again</Button>
 		</div>
-	{:else if !selectedPlayer}
+	{:else if !slippiCode}
 		<div class="flex flex-col items-center justify-center py-32">
 			<p class="text-muted-foreground">Select a player to view stats</p>
 		</div>
@@ -496,7 +612,7 @@
 		</div>
 	{:else}
 		<div class="flex flex-col items-center justify-center py-32">
-			<p class="text-muted-foreground">No stats found for {selectedPlayer}</p>
+			<p class="text-muted-foreground">No stats found for {slippiCode}</p>
 		</div>
 	{/if}
 </div>
