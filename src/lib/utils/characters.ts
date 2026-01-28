@@ -139,7 +139,10 @@ export function getStageSlug(stageId: StageId | number): string {
  */
 export function getStageImage(stageId: StageId | number): string {
 	const slug = getStageSlug(stageId);
-	return `/stages/${slug}.jpg`;
+	// Some stages use .png, others use .jpg
+	const pngStages = ["final-destination", "yoshis-story"];
+	const ext = pngStages.includes(slug) ? "png" : "jpg";
+	return `/stages/${slug}.${ext}`;
 }
 
 /**

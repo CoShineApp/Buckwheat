@@ -135,13 +135,18 @@ export async function parseSlippiStats(
 			const groundTechCount = sumObjectValues(actionCounts?.groundTechCount);
 			const wallTechCount = sumObjectValues(actionCounts?.wallTechCount);
 
+			// Port in slippi-js is 0-indexed (0-3), same as Rust/peppi
+			// The fallback uses playerIndex which is also 0-indexed
+			const port = player.port ?? playerIndex;
+			console.log(`[SlippiStats] Player ${playerIndex}: port=${port}, connectCode=${connectCode}`);
+
 			const playerStats: PlayerStatsForDB = {
 				playerIndex,
 				connectCode,
 				displayName,
 				characterId: player.characterId ?? 0,
 				characterColor: player.characterColor ?? 0,
-				port: player.port ?? playerIndex + 1,
+				port,
 
 				// Overall performance
 				totalDamage: overall?.totalDamage ?? 0,
@@ -224,6 +229,17 @@ export async function parseSlippiStats(
 			}
 		}
 
+		// Parse created_at from metadata.startAt or filename (format: Game_20260126T170709.slp)
+		let createdAt: string | null = metadata?.startAt ?? null;
+		if (!createdAt) {
+			// Try to parse from filename
+			const filenameMatch = slpPath.match(/Game_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.slp$/);
+			if (filenameMatch) {
+				const [, year, month, day, hour, minute, second] = filenameMatch;
+				createdAt = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+			}
+		}
+
 		// Build the complete game stats
 		const gameStats: GameStatsForDB = {
 			recordingId,
@@ -237,6 +253,7 @@ export async function parseSlippiStats(
 			playedOn: metadata?.playedOn ?? null,
 			matchId: settings.matchInfo?.matchId ?? null,
 			gameNumber: settings.matchInfo?.gameNumber ?? null,
+			createdAt,
 
 			// Outcome
 			winnerIndex,

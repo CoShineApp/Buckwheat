@@ -11,12 +11,14 @@ pub use recordings::{
     get_all_recordings, get_recordings_paginated, get_recording_by_video_path, 
     upsert_recording, delete_recording, get_cached_video_paths,
     // Game stats operations
-    upsert_game_stats, get_game_stats_by_id,
+    upsert_game_stats, game_stats_exists_by_slp_path,
     // Player stats operations
     upsert_player_stats, get_player_stats_by_recording, get_aggregated_player_stats,
+    // Filter options
+    get_available_filter_options,
     // Types
     RecordingRow, GameStatsRow, RecordingWithStats, PlayerStatsRow,
-    AggregatedPlayerStats, StatsFilter,
+    AggregatedPlayerStats, StatsFilter, AvailableFilterOptions,
 };
 
 use rusqlite::Connection;

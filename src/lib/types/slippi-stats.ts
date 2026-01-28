@@ -100,6 +100,9 @@ export interface GameStatsForDB {
 	playedOn: string | null;
 	matchId: string | null;
 	gameNumber: number | null;
+	
+	// Timestamp when game was played (ISO 8601)
+	createdAt: string | null;
 
 	// Outcome
 	winnerIndex: number | null;

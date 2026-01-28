@@ -61,8 +61,10 @@ export interface SlippiPlayer {
 	character_color: number;
 	/** Player's name tag */
 	player_tag: string;
-	/** Controller port (1-4) */
+	/** Controller port (0-indexed) */
 	port: number;
+	/** Number of kills (stocks taken). Winner has 4 in a standard game. */
+	kill_count?: number;
 }
 
 /**

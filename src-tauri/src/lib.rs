@@ -11,7 +11,8 @@ mod window_detector;
 
 // Clips commands
 use commands::clips::{
-    compress_video_for_upload, delete_temp_file, mark_clip_timestamp, process_clip_markers,
+    apply_video_edit, compress_video_for_upload, create_clip_from_range, delete_temp_file,
+    mark_clip_timestamp, process_clip_markers,
 };
 // Cloud commands
 use commands::cloud::get_device_id;
@@ -20,8 +21,8 @@ use commands::default::{read, write};
 // Library commands
 use commands::library::{
     delete_recording, get_clips, get_player_stats, get_recordings, get_total_player_stats,
-    open_file_location, open_recording_folder, open_video, refresh_recordings_cache,
-    save_computed_stats,
+    get_available_filter_options, open_file_location, open_recording_folder, open_video, 
+    refresh_recordings_cache, save_computed_stats, list_slp_files, check_slp_synced,
 };
 // Recording commands
 use commands::recording::{start_generic_recording, start_recording, stop_recording};
@@ -31,7 +32,7 @@ use commands::settings::{
 };
 // Slippi commands
 use commands::slippi::{
-    get_default_slippi_path, get_last_replay_path, parse_slp_events, start_watching, stop_watching,
+    get_default_slippi_path, get_last_replay_path, start_watching, stop_watching,
 };
 // Window commands
 use commands::window::{
@@ -54,8 +55,6 @@ pub fn run() {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
-                        // Filter out verbose peppi library logs
-                        .filter(|metadata| !metadata.target().starts_with("peppi::"))
                         .build(),
                 )?;
             }
@@ -110,12 +109,13 @@ pub fn run() {
             get_recording_directory,
             open_file_location,
             get_last_replay_path,
-            parse_slp_events,
             refresh_recordings_cache,
             // Clip commands
             mark_clip_timestamp,
             process_clip_markers,
             get_clips,
+            apply_video_edit,
+            create_clip_from_range,
             // Cloud commands
             compress_video_for_upload,
             delete_temp_file,
@@ -124,6 +124,10 @@ pub fn run() {
             save_computed_stats,
             get_player_stats,
             get_total_player_stats,
+            get_available_filter_options,
+            // Historical sync commands
+            list_slp_files,
+            check_slp_synced,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

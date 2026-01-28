@@ -70,13 +70,8 @@
 			if (item.type === 'recording') {
 				await cloudStorage.deleteUpload(item.id);
 			} else {
-				// Delete clip from database
-				const { error } = await auth.supabase
-					.from('clips')
-					.delete()
-					.eq('id', item.id);
-				if (error) throw error;
-				await cloudStorage.refreshUserClips();
+				// Delete clip using edge function (handles B2 deletion + storage update)
+				await cloudStorage.deleteClip(item.id);
 			}
 			toast.success(`${itemType.charAt(0).toUpperCase() + itemType.slice(1)} deleted from cloud`);
 		} catch (error) {

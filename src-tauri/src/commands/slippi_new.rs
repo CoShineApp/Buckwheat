@@ -8,7 +8,6 @@ use crate::commands::recording::{configure_target_window, resolve_recording_qual
 use crate::events::{game as game_events, recording as recording_events};
 use crate::game_detector::{slippi_paths, GameDetector};
 use crate::library;
-use crate::recorder;
 use std::path::PathBuf;
 use tauri::{Emitter, Listener, Manager, State};
 
@@ -185,14 +184,6 @@ pub async fn stop_watching(state: State<'_, AppState>) -> Result<(), Error> {
     
     *game_detector = None;
     Ok(())
-}
-
-/// Parse a .slp file and extract game events
-#[tauri::command]
-pub async fn parse_slp_events(slp_path: String) -> Result<Vec<crate::slippi::GameEvent>, Error> {
-    let game = crate::slippi::parse_slp_file(&slp_path)?;
-    let events = crate::slippi::extract_death_events(&game)?;
-    Ok(events)
 }
 
 // ============================================================================

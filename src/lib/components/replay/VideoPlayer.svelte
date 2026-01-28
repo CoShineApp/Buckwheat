@@ -141,6 +141,22 @@
 			plyrInstance.currentTime = time;
 		}
 	}
+
+	// Expose video dimensions for crop calculations
+	export function getVideoDimensions(): { width: number; height: number } | null {
+		if (videoElement && videoElement.videoWidth && videoElement.videoHeight) {
+			return {
+				width: videoElement.videoWidth,
+				height: videoElement.videoHeight,
+			};
+		}
+		return null;
+	}
+
+	// Expose player dimensions for overlay positioning
+	export function getPlayerDimensions(): { width: number; height: number } {
+		return playerDimensions;
+	}
 </script>
 
 <style>

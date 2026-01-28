@@ -11,10 +11,10 @@
 		TableRow,
 	} from "$lib/components/ui/table";
 	import { recordingsStore } from "$lib/stores/recordings.svelte";
-	import { getStageName } from "$lib/utils/characters";
 	import { formatRelativeTime, formatFileSize } from "$lib/utils/format";
 	import CharacterIcon from "./CharacterIcon.svelte";
-	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2, ChevronLeft, ChevronRight, BarChart3 } from "@lucide/svelte";
+	import StageIcon from "./StageIcon.svelte";
+	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2, ChevronLeft, ChevronRight, BarChart3, Crown } from "@lucide/svelte";
 	import { invoke } from "@tauri-apps/api/core";
 	import { handleTauriError, showSuccess } from "$lib/utils/errors";
 	import { navigation } from "$lib/stores/navigation.svelte";
@@ -206,16 +206,24 @@
 											</div>
 											<div class="flex flex-col gap-0.5">
 												{#if recording.slippi_metadata.players.length >= 2}
-													{@const winner = recording.slippi_metadata.players.find(p => p.port === recording.slippi_metadata?.winner_port)}
-													{@const loser = recording.slippi_metadata.players.find(p => p.port !== recording.slippi_metadata?.winner_port)}
+													{@const winnerPort = recording.slippi_metadata.winner_port}
+													{@const winner = winnerPort !== undefined && winnerPort !== null 
+														? recording.slippi_metadata.players.find(p => p.port === winnerPort)
+														: null}
+													{@const loser = winnerPort !== undefined && winnerPort !== null
+														? recording.slippi_metadata.players.find(p => p.port !== winnerPort)
+														: null}
 													
-													{#if winner}
-														<div class="flex items-center gap-1.5 text-sm">
-															<span class="font-semibold text-green-600 dark:text-green-400">{winner.player_tag}</span>
-															<span class="text-xs text-muted-foreground">defeated</span>
-															<span class="font-medium text-muted-foreground">{loser?.player_tag || "Unknown"}</span>
-														</div>
+												{#if winner && loser}
+													<div class="flex items-center gap-1.5 text-sm">
+														<Crown class="size-4 text-yellow-500 fill-yellow-500/30" />
+														<span class="font-semibold text-green-600 dark:text-green-400">{winner.player_tag}</span>
+														<span class="text-xs text-muted-foreground">defeated</span>
+														<span class="font-medium text-muted-foreground">{loser.player_tag}</span>
+													</div>
 													{:else}
+														<!-- Debug: No winner_port found -->
+														{@const _ = console.log('[RecordingsTable] No winner for', recording.id, 'winner_port:', winnerPort, 'players:', recording.slippi_metadata.players.map(p => ({tag: p.player_tag, port: p.port})))}
 														<span class="text-sm font-medium">
 															{recording.slippi_metadata.players[0]?.player_tag || "Player 1"}
 															vs
@@ -236,9 +244,11 @@
 
 								<!-- Stage -->
 								<TableCell>
-									<span class="text-sm">
-										{recording.slippi_metadata ? getStageName(recording.slippi_metadata.stage) : "—"}
-									</span>
+									{#if recording.slippi_metadata}
+										<StageIcon stageId={recording.slippi_metadata.stage} size="sm" />
+									{:else}
+										<span class="text-sm text-muted-foreground">—</span>
+									{/if}
 								</TableCell>
 
 								<!-- Duration -->

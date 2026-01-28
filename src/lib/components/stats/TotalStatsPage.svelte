@@ -1,16 +1,58 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/core";
-	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Calendar as CalendarIcon } from "@lucide/svelte";
-	import { getCharacterName, getStageName, CHARACTER_NAMES, STAGE_NAMES } from "$lib/utils/characters";
-	import { CharacterId, StageId } from "$lib/types/recording";
+	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Clock, RefreshCw, Database } from "@lucide/svelte";
+	import { getCharacterName, getStageName } from "$lib/utils/characters";
 	import CharacterIcon from "$lib/components/recordings/CharacterIcon.svelte";
+	import StageIcon from "$lib/components/recordings/StageIcon.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import * as Card from "$lib/components/ui/card";
 	import * as Select from "$lib/components/ui/select";
-	import * as Popover from "$lib/components/ui/popover";
-	import { Calendar } from "$lib/components/ui/calendar";
 	import { formatDecimal } from "$lib/utils/format";
-	import { CalendarDate, type DateValue } from "@internationalized/date";
+	import { settings } from "$lib/stores/settings.svelte";
+
+	// Time range options
+	type TimeRange = "" | "today" | "week" | "month" | "3months" | "year";
+	const timeRangeOptions: { value: TimeRange; label: string }[] = [
+		{ value: "", label: "All Time" },
+		{ value: "today", label: "Today" },
+		{ value: "week", label: "Last Week" },
+		{ value: "month", label: "Last Month" },
+		{ value: "3months", label: "Last 3 Months" },
+		{ value: "year", label: "Last Year" },
+	];
+
+	function getTimeRangeFilter(range: TimeRange): { startTime?: string; endTime?: string } {
+		if (!range) return {};
+		
+		const now = new Date();
+		const endTime = now.toISOString();
+		let startDate: Date;
+		
+		switch (range) {
+			case "today":
+				startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+				break;
+			case "week":
+				startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+				break;
+			case "month":
+				startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+				break;
+			case "3months":
+				startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+				break;
+			case "year":
+				startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+				break;
+			default:
+				return {};
+		}
+		
+		return {
+			startTime: startDate.toISOString(),
+			endTime,
+		};
+	}
 
 	interface AggregatedStats {
 		totalGames: number;
@@ -41,47 +83,76 @@
 		endTime?: string;
 	}
 
+	interface AvailableFilterOptions {
+		connectCodes: string[];
+		playerCharacters: number[];
+		opponentCharacters: number[];
+		stages: number[];
+	}
+
 	let loading = $state(true);
 	let stats = $state<AggregatedStats | null>(null);
 	let error = $state<string | null>(null);
-	let connectCode = $state("HATS#982");
+	let filterOptions = $state<AvailableFilterOptions | null>(null);
+	let filterOptionsLoading = $state(true);
+
+	// User's Slippi code (loaded from/saved to settings)
+	let slippiCode = $state<string>(settings.slippiCode ?? "");
+	let slippiCodeInput = $state<string>(settings.slippiCode ?? "");
+	let isEditingCode = $state(!settings.slippiCode);
 
 	// Filter state
 	let opponentCharacterFilter = $state<string | undefined>(undefined);
 	let playerCharacterFilter = $state<string | undefined>(undefined);
 	let stageFilter = $state<string | undefined>(undefined);
-	let startDateValue = $state<DateValue | undefined>(undefined);
-	let endDateValue = $state<DateValue | undefined>(undefined);
-	let showFilters = $state(false);
+	let timeRangeFilter = $state<TimeRange>("");
 
-	// Get all characters and stages for filter dropdowns
-	const allCharacters = Object.entries(CHARACTER_NAMES).map(([id, name]) => ({
-		id: parseInt(id),
-		name
-	})).sort((a, b) => a.name.localeCompare(b.name));
+	// Derived: available characters and stages from filter options
+	let availablePlayerCharacters = $derived(
+		filterOptions?.playerCharacters.map(id => ({
+			id,
+			name: getCharacterName(id)
+		})).sort((a, b) => a.name.localeCompare(b.name)) ?? []
+	);
 
-	const allStages = Object.entries(STAGE_NAMES).map(([id, name]) => ({
-		id: parseInt(id),
-		name
-	})).sort((a, b) => a.name.localeCompare(b.name));
+	let availableOpponentCharacters = $derived(
+		filterOptions?.opponentCharacters.map(id => ({
+			id,
+			name: getCharacterName(id)
+		})).sort((a, b) => a.name.localeCompare(b.name)) ?? []
+	);
+
+	let availableStages = $derived(
+		filterOptions?.stages.map(id => ({
+			id,
+			name: getStageName(id)
+		})).sort((a, b) => a.name.localeCompare(b.name)) ?? []
+	);
 
 	// Build filter object from state
-	let currentFilter = $derived<StatsFilter>({
-		opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
-		playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
-		stageId: stageFilter ? parseInt(stageFilter) : undefined,
-		startTime: startDateValue ? `${startDateValue.year}-${String(startDateValue.month).padStart(2, '0')}-${String(startDateValue.day).padStart(2, '0')}T00:00:00` : undefined,
-		endTime: endDateValue ? `${endDateValue.year}-${String(endDateValue.month).padStart(2, '0')}-${String(endDateValue.day).padStart(2, '0')}T23:59:59` : undefined,
+	let currentFilter = $derived.by<StatsFilter>(() => {
+		const timeFilter = getTimeRangeFilter(timeRangeFilter);
+		return {
+			opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
+			playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
+			stageId: stageFilter ? parseInt(stageFilter) : undefined,
+			startTime: timeFilter.startTime,
+			endTime: timeFilter.endTime,
+		};
 	});
 
-	// Check if any filters are active
+	// Check if any filters are active (empty string counts as no filter)
 	let hasActiveFilters = $derived(
-		opponentCharacterFilter !== undefined ||
-		playerCharacterFilter !== undefined ||
-		stageFilter !== undefined ||
-		startDateValue !== undefined ||
-		endDateValue !== undefined
+		(opponentCharacterFilter !== undefined && opponentCharacterFilter !== "") ||
+		(playerCharacterFilter !== undefined && playerCharacterFilter !== "") ||
+		(stageFilter !== undefined && stageFilter !== "") ||
+		timeRangeFilter !== ""
 	);
+
+	// Historical sync state
+	let isSyncing = $state(false);
+	let syncProgress = $state({ current: 0, total: 0, skipped: 0 });
+	let syncError = $state<string | null>(null);
 
 	// Derived sorted stats to avoid mutating state in template
 	let sortedCharacterStats = $derived(
@@ -92,19 +163,41 @@
 		stats?.stageStats ? [...stats.stageStats].sort((a, b) => b.games - a.games) : []
 	);
 
+	// Load filter options when slippi code changes
 	$effect(() => {
-		loadStats();
+		loadFilterOptions(slippiCode || undefined);
 	});
 
+	// Load stats when slippi code changes
+	$effect(() => {
+		if (slippiCode) {
+			loadStats();
+		}
+	});
+
+	async function loadFilterOptions(connectCode?: string) {
+		filterOptionsLoading = true;
+		try {
+			filterOptions = await invoke<AvailableFilterOptions>("get_available_filter_options", {
+				connectCode: connectCode || null
+			});
+		} catch (e) {
+			console.error("Failed to load filter options:", e);
+		} finally {
+			filterOptionsLoading = false;
+		}
+	}
+
 	async function loadStats() {
+		if (!slippiCode) return;
+		
 		loading = true;
 		error = null;
 		try {
-			// Only pass non-empty filter
 			const filterToSend = hasActiveFilters ? currentFilter : null;
 			
 			stats = await invoke<AggregatedStats>("get_total_player_stats", {
-				connectCode: connectCode,
+				connectCode: slippiCode,
 				filter: filterToSend
 			});
 		} catch (e) {
@@ -113,6 +206,20 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function saveSlippiCode() {
+		const code = slippiCodeInput.trim().toUpperCase();
+		if (code) {
+			slippiCode = code;
+			await settings.set("slippiCode", code);
+			isEditingCode = false;
+		}
+	}
+
+	function editSlippiCode() {
+		slippiCodeInput = slippiCode;
+		isEditingCode = true;
 	}
 
 	function getWinRate(wins: number, games: number): string {
@@ -124,178 +231,250 @@
 		opponentCharacterFilter = undefined;
 		playerCharacterFilter = undefined;
 		stageFilter = undefined;
-		startDateValue = undefined;
-		endDateValue = undefined;
+		timeRangeFilter = "";
 	}
 
 	function applyFilters() {
 		loadStats();
 	}
 
-	function formatDateValue(dv: DateValue | undefined): string {
-		if (!dv) return "Pick a date";
-		return `${dv.month}/${dv.day}/${dv.year}`;
+	async function syncHistoricalData() {
+		const slippiPath = settings.slippiPath;
+		if (!slippiPath) {
+			syncError = "Slippi directory not configured in settings";
+			return;
+		}
+
+		isSyncing = true;
+		syncError = null;
+		syncProgress = { current: 0, total: 0, skipped: 0 };
+
+		try {
+			// Get list of all .slp files
+			const slpFiles: string[] = await invoke("list_slp_files", { directory: slippiPath });
+			syncProgress.total = slpFiles.length;
+
+			if (slpFiles.length === 0) {
+				syncError = "No .slp files found in directory";
+				isSyncing = false;
+				return;
+			}
+
+			// Import slippi-js parsing function
+			const { parseAndSaveSlippiStats } = await import("$lib/services/slippi-stats");
+
+			// Process each file
+			for (let i = 0; i < slpFiles.length; i++) {
+				const slpPath = slpFiles[i];
+				syncProgress.current = i + 1;
+
+				// Check if already synced
+				const alreadySynced: boolean = await invoke("check_slp_synced", { slpPath });
+				if (alreadySynced) {
+					syncProgress.skipped++;
+					continue;
+				}
+
+				// Parse and save stats (uses slp_path as recording_id for historical games)
+				try {
+					// Generate a unique ID using crypto hash of the full path
+					const encoder = new TextEncoder();
+					const data = encoder.encode(slpPath);
+					const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+					const hashArray = Array.from(new Uint8Array(hashBuffer));
+					const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+					const recordingId = `historical-${hashHex.slice(0, 32)}`;
+					
+					await parseAndSaveSlippiStats(slpPath, recordingId);
+				} catch (e) {
+					console.warn(`Failed to parse ${slpPath}:`, e);
+					// Continue with other files
+				}
+			}
+
+			// Refresh filter options and stats after sync
+			await loadFilterOptions(slippiCode || undefined);
+			if (slippiCode) {
+				await loadStats();
+			}
+		} catch (e) {
+			console.error("Historical sync failed:", e);
+			syncError = e instanceof Error ? e.message : "Sync failed";
+		} finally {
+			isSyncing = false;
+		}
 	}
 </script>
 
-<div class="container mx-auto max-w-7xl p-6 space-y-8">
+<div class="container mx-auto max-w-7xl p-6 space-y-6">
+	<!-- Header -->
 	<div class="flex items-center justify-between">
 		<h1 class="text-3xl font-bold tracking-tight">Total Stats</h1>
 		<div class="flex items-center gap-4">
-			<Button 
-				variant={showFilters ? "default" : "outline"} 
+			<!-- Sync Historical Data Button -->
+			<Button
+				variant="outline"
 				size="sm"
-				onclick={() => showFilters = !showFilters}
+				onclick={syncHistoricalData}
+				disabled={isSyncing}
 				class="gap-2"
 			>
-				<Filter class="size-4" />
-				Filters
-				{#if hasActiveFilters}
-					<span class="ml-1 bg-primary-foreground text-primary rounded-full px-1.5 py-0.5 text-xs font-bold">
-						!
-					</span>
+				{#if isSyncing}
+					<Loader2 class="size-4 animate-spin" />
+					<span>Syncing {syncProgress.current}/{syncProgress.total}...</span>
+				{:else}
+					<Database class="size-4" />
+					<span>Sync Historical Data</span>
 				{/if}
 			</Button>
+
+			<!-- Slippi Code Input -->
 			<div class="flex items-center gap-2">
-				<span class="text-sm text-muted-foreground">Player:</span>
-				<code class="bg-muted px-2 py-1 rounded text-sm font-mono">{connectCode}</code>
+				{#if isEditingCode}
+					<input
+						type="text"
+						bind:value={slippiCodeInput}
+						placeholder="HATS#982"
+						class="w-32 rounded-md border border-input bg-background px-3 py-1.5 text-sm uppercase placeholder:normal-case"
+						onkeydown={(e) => e.key === 'Enter' && saveSlippiCode()}
+					/>
+					<Button size="sm" onclick={saveSlippiCode}>Save</Button>
+				{:else}
+					<span class="font-medium text-lg">{slippiCode}</span>
+					<Button variant="ghost" size="sm" onclick={editSlippiCode}>Edit</Button>
+				{/if}
 			</div>
 		</div>
 	</div>
 
-	<!-- Filter Panel -->
-	{#if showFilters}
-		<Card.Root class="border-dashed border-2 bg-muted/30">
-			<Card.Header class="pb-3">
-				<div class="flex items-center justify-between">
-					<Card.Title class="text-lg">Filter Stats</Card.Title>
+	<!-- Sync Status/Error -->
+	{#if syncError}
+		<div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+			{syncError}
+		</div>
+	{/if}
+	{#if isSyncing && syncProgress.skipped > 0}
+		<div class="text-sm text-muted-foreground">
+			Skipped {syncProgress.skipped} already synced files
+		</div>
+	{/if}
+
+	<!-- Filters (always visible) -->
+	<Card.Root class="border-dashed border-2 bg-muted/30">
+		<Card.Content class="pt-4 pb-4">
+			<div class="flex flex-wrap items-end gap-4">
+				<!-- Player Character Filter -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">Played As</span>
+					<Select.Root type="single" bind:value={playerCharacterFilter}>
+						<Select.Trigger class="w-40">
+							{#if playerCharacterFilter}
+								<div class="flex items-center gap-2">
+									<CharacterIcon characterId={parseInt(playerCharacterFilter)} size="sm" />
+									<span class="truncate">{getCharacterName(parseInt(playerCharacterFilter))}</span>
+								</div>
+							{:else}
+								<span class="text-muted-foreground">Any character</span>
+							{/if}
+						</Select.Trigger>
+						<Select.Content class="max-h-60">
+							<Select.Item value="" class="text-muted-foreground">Any character</Select.Item>
+							{#each availablePlayerCharacters as char}
+								<Select.Item value={String(char.id)} class="flex items-center gap-2">
+									<CharacterIcon characterId={char.id} size="sm" />
+									{char.name}
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Opponent Character Filter -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">Played Against</span>
+					<Select.Root type="single" bind:value={opponentCharacterFilter}>
+						<Select.Trigger class="w-40">
+							{#if opponentCharacterFilter}
+								<div class="flex items-center gap-2">
+									<CharacterIcon characterId={parseInt(opponentCharacterFilter)} size="sm" />
+									<span class="truncate">{getCharacterName(parseInt(opponentCharacterFilter))}</span>
+								</div>
+							{:else}
+								<span class="text-muted-foreground">Any opponent</span>
+							{/if}
+						</Select.Trigger>
+						<Select.Content class="max-h-60">
+							<Select.Item value="" class="text-muted-foreground">Any opponent</Select.Item>
+							{#each availableOpponentCharacters as char}
+								<Select.Item value={String(char.id)} class="flex items-center gap-2">
+									<CharacterIcon characterId={char.id} size="sm" />
+									{char.name}
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Stage Filter -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">Stage</span>
+					<Select.Root type="single" bind:value={stageFilter}>
+						<Select.Trigger class="w-40">
+							{#if stageFilter}
+								<div class="flex items-center gap-2">
+									<StageIcon stageId={parseInt(stageFilter)} size="sm" />
+									<span class="truncate">{getStageName(parseInt(stageFilter))}</span>
+								</div>
+							{:else}
+								<span class="text-muted-foreground">Any stage</span>
+							{/if}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value="" class="text-muted-foreground">Any stage</Select.Item>
+							{#each availableStages as stage}
+								<Select.Item value={String(stage.id)} class="flex items-center gap-2">
+									<StageIcon stageId={stage.id} size="sm" />
+									{stage.name}
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Time Range -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">Time Range</span>
+					<Select.Root type="single" bind:value={timeRangeFilter}>
+						<Select.Trigger class="w-36">
+							<div class="flex items-center gap-2">
+								<Clock class="size-3 text-muted-foreground" />
+								<span>{timeRangeOptions.find(o => o.value === timeRangeFilter)?.label ?? "All Time"}</span>
+							</div>
+						</Select.Trigger>
+						<Select.Content>
+							{#each timeRangeOptions as option}
+								<Select.Item value={option.value}>{option.label}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+
+				<!-- Actions -->
+				<div class="flex items-center gap-2 ml-auto">
 					{#if hasActiveFilters}
-						<Button variant="ghost" size="sm" onclick={clearAllFilters} class="gap-1 text-muted-foreground">
+						<Button variant="ghost" size="sm" onclick={clearAllFilters} class="gap-1 text-muted-foreground h-9">
 							<X class="size-3" />
-							Clear all
+							Clear
 						</Button>
 					{/if}
-				</div>
-			</Card.Header>
-			<Card.Content>
-				<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-					<!-- Player Character Filter -->
-					<div class="space-y-2">
-						<label class="text-sm font-medium text-muted-foreground">Played As</label>
-						<Select.Root type="single" bind:value={playerCharacterFilter}>
-							<Select.Trigger class="w-full">
-								{#if playerCharacterFilter}
-									<div class="flex items-center gap-2">
-										<CharacterIcon characterId={parseInt(playerCharacterFilter)} size="sm" />
-										{getCharacterName(parseInt(playerCharacterFilter))}
-									</div>
-								{:else}
-									<span class="text-muted-foreground">Any character</span>
-								{/if}
-							</Select.Trigger>
-							<Select.Content class="max-h-60">
-								{#each allCharacters as char}
-									<Select.Item value={String(char.id)} class="flex items-center gap-2">
-										<CharacterIcon characterId={char.id} size="sm" />
-										{char.name}
-									</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-
-					<!-- Opponent Character Filter -->
-					<div class="space-y-2">
-						<label class="text-sm font-medium text-muted-foreground">Played Against</label>
-						<Select.Root type="single" bind:value={opponentCharacterFilter}>
-							<Select.Trigger class="w-full">
-								{#if opponentCharacterFilter}
-									<div class="flex items-center gap-2">
-										<CharacterIcon characterId={parseInt(opponentCharacterFilter)} size="sm" />
-										{getCharacterName(parseInt(opponentCharacterFilter))}
-									</div>
-								{:else}
-									<span class="text-muted-foreground">Any opponent</span>
-								{/if}
-							</Select.Trigger>
-							<Select.Content class="max-h-60">
-								{#each allCharacters as char}
-									<Select.Item value={String(char.id)} class="flex items-center gap-2">
-										<CharacterIcon characterId={char.id} size="sm" />
-										{char.name}
-									</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-
-					<!-- Stage Filter -->
-					<div class="space-y-2">
-						<label class="text-sm font-medium text-muted-foreground">Stage</label>
-						<Select.Root type="single" bind:value={stageFilter}>
-							<Select.Trigger class="w-full">
-								{#if stageFilter}
-									{getStageName(parseInt(stageFilter))}
-								{:else}
-									<span class="text-muted-foreground">Any stage</span>
-								{/if}
-							</Select.Trigger>
-							<Select.Content>
-								{#each allStages as stage}
-									<Select.Item value={String(stage.id)}>
-										{stage.name}
-									</Select.Item>
-								{/each}
-							</Select.Content>
-						</Select.Root>
-					</div>
-
-					<!-- Start Date -->
-					<div class="space-y-2">
-						<label class="text-sm font-medium text-muted-foreground">From Date</label>
-						<Popover.Root>
-							<Popover.Trigger>
-								{#snippet child({ props })}
-									<Button variant="outline" class="w-full justify-start text-left font-normal" {...props}>
-										<CalendarIcon class="mr-2 size-4" />
-										{formatDateValue(startDateValue)}
-									</Button>
-								{/snippet}
-							</Popover.Trigger>
-							<Popover.Content class="w-auto p-0">
-								<Calendar type="single" bind:value={startDateValue} />
-							</Popover.Content>
-						</Popover.Root>
-					</div>
-
-					<!-- End Date -->
-					<div class="space-y-2">
-						<label class="text-sm font-medium text-muted-foreground">To Date</label>
-						<Popover.Root>
-							<Popover.Trigger>
-								{#snippet child({ props })}
-									<Button variant="outline" class="w-full justify-start text-left font-normal" {...props}>
-										<CalendarIcon class="mr-2 size-4" />
-										{formatDateValue(endDateValue)}
-									</Button>
-								{/snippet}
-							</Popover.Trigger>
-							<Popover.Content class="w-auto p-0">
-								<Calendar type="single" bind:value={endDateValue} />
-							</Popover.Content>
-						</Popover.Root>
-					</div>
-				</div>
-
-				<div class="mt-4 flex justify-end">
-					<Button onclick={applyFilters} class="gap-2">
-						<Filter class="size-4" />
-						Apply Filters
+					<Button onclick={applyFilters} size="sm" class="gap-1.5 h-9">
+						<Filter class="size-3" />
+						Apply
 					</Button>
 				</div>
-			</Card.Content>
-		</Card.Root>
-	{/if}
+			</div>
+		</Card.Content>
+	</Card.Root>
 
 	{#if loading}
 		<div class="flex flex-col items-center justify-center py-32 space-y-4">
@@ -307,6 +486,10 @@
 			<p class="text-destructive font-semibold text-xl">Failed to load stats</p>
 			<p class="text-muted-foreground max-w-md text-center">{error}</p>
 			<Button variant="outline" onclick={loadStats}>Try Again</Button>
+		</div>
+	{:else if !slippiCode}
+		<div class="flex flex-col items-center justify-center py-32">
+			<p class="text-muted-foreground">Select a player to view stats</p>
 		</div>
 	{:else if stats}
 		<!-- Overview Cards -->
@@ -430,8 +613,9 @@
 				<Card.Content>
 					<div class="space-y-4">
 						{#each sortedStageStats as stageStat}
-							<div class="flex items-center justify-between">
-								<div class="space-y-1">
+							<div class="flex items-center gap-3">
+								<StageIcon stageId={stageStat.stageId} size="sm" />
+								<div class="flex-1 space-y-1">
 									<p class="text-sm font-medium leading-none">{getStageName(stageStat.stageId)}</p>
 									<p class="text-xs text-muted-foreground">{stageStat.games} games</p>
 								</div>
@@ -447,7 +631,7 @@
 		</div>
 	{:else}
 		<div class="flex flex-col items-center justify-center py-32">
-			<p class="text-muted-foreground">No stats found for {connectCode}</p>
+			<p class="text-muted-foreground">No stats found for {slippiCode}</p>
 		</div>
 	{/if}
 </div>
