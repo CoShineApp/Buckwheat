@@ -129,19 +129,20 @@ pub fn get_all_recordings(conn: &Connection) -> rusqlite::Result<Vec<RecordingRo
 }
 
 /// Get recordings with pagination, joined with game_stats and player_stats
+/// Excludes clips (videos in the Clips folder) - those are fetched separately via get_clips
 pub fn get_recordings_paginated(
     conn: &Connection, 
     limit: i32, 
     offset: i32
 ) -> rusqlite::Result<(Vec<RecordingWithStats>, i32)> {
-    // Get total count
+    // Get total count (excluding clips)
     let total: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM recordings",
+        "SELECT COUNT(*) FROM recordings WHERE video_path NOT LIKE '%Clips%'",
         [],
         |row| row.get(0),
     )?;
     
-    // Get paginated rows with game stats
+    // Get paginated rows with game stats (excluding clips)
     let mut stmt = conn.prepare(
         "SELECT r.id, r.video_path, r.slp_path, r.file_size, r.file_modified_at, 
                 r.thumbnail_path, r.start_time, r.cached_at, r.needs_reparse,
@@ -151,6 +152,7 @@ pub fn get_recordings_paginated(
                 g.is_pal, g.played_on, g.created_at, g.slp_path
          FROM recordings r
          LEFT JOIN game_stats g ON r.id = g.id
+         WHERE r.video_path NOT LIKE '%Clips%'
          ORDER BY r.start_time DESC
          LIMIT ? OFFSET ?"
     )?;
@@ -914,4 +916,118 @@ pub fn get_available_filter_options(conn: &Connection, connect_code: Option<&str
         opponent_characters,
         stages,
     })
+}
+
+/// Time series data point for chart visualization
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TimeSeriesDataPoint {
+    pub date: String,
+    pub l_cancel_percent: Option<f64>,
+    pub win: bool,
+    pub inputs_per_minute: Option<f64>,
+    pub openings_per_kill: Option<f64>,
+    pub damage_per_opening: Option<f64>,
+    pub neutral_win_ratio: Option<f64>,
+    pub roll_count: Option<f64>,
+}
+
+/// Get per-game stats as time series for chart visualization
+pub fn get_player_stats_timeseries(
+    conn: &Connection,
+    connect_code: &str,
+    filter: Option<StatsFilter>,
+) -> rusqlite::Result<Vec<TimeSeriesDataPoint>> {
+    let filter = filter.unwrap_or_default();
+    
+    // Build dynamic WHERE clause
+    let mut where_clauses = vec!["p.connect_code = ?1".to_string()];
+    let mut param_idx = 2;
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(connect_code.to_string())];
+    
+    if let Some(stage) = filter.stage_id {
+        where_clauses.push(format!("g.stage = ?{}", param_idx));
+        params_vec.push(Box::new(stage));
+        param_idx += 1;
+    }
+    
+    if let Some(start) = &filter.start_time {
+        where_clauses.push(format!("g.created_at >= ?{}", param_idx));
+        params_vec.push(Box::new(start.clone()));
+        param_idx += 1;
+    }
+    
+    if let Some(end) = &filter.end_time {
+        where_clauses.push(format!("g.created_at <= ?{}", param_idx));
+        params_vec.push(Box::new(end.clone()));
+        param_idx += 1;
+    }
+    
+    if let Some(player_char) = filter.player_character_id {
+        where_clauses.push(format!("p.character_id = ?{}", param_idx));
+        params_vec.push(Box::new(player_char));
+        param_idx += 1;
+    }
+    
+    // Handle opponent character filter
+    let opponent_join = if filter.opponent_character_id.is_some() {
+        "JOIN player_stats opp_filter ON p.recording_id = opp_filter.recording_id AND opp_filter.player_index != p.player_index"
+    } else {
+        ""
+    };
+    
+    if let Some(opp_char) = filter.opponent_character_id {
+        where_clauses.push(format!("opp_filter.character_id = ?{}", param_idx));
+        params_vec.push(Box::new(opp_char));
+        // param_idx += 1; // Not needed, last param
+    }
+    
+    let where_clause = where_clauses.join(" AND ");
+    
+    // Query to get per-game stats with date
+    let query = format!(
+        "SELECT 
+            g.created_at,
+            CASE WHEN p.l_cancel_success_count + p.l_cancel_fail_count > 0 
+                THEN CAST(p.l_cancel_success_count AS REAL) / (p.l_cancel_success_count + p.l_cancel_fail_count) * 100 
+                ELSE NULL 
+            END as l_cancel_percent,
+            CASE 
+                WHEN g.winner_port IS NOT NULL AND (
+                    (g.player1_port = p.port AND g.winner_port = g.player1_port) OR
+                    (g.player2_port = p.port AND g.winner_port = g.player2_port)
+                ) THEN 1
+                ELSE 0
+            END as win,
+            p.inputs_per_minute,
+            p.openings_per_kill,
+            p.damage_per_opening,
+            p.neutral_win_ratio,
+            CAST(p.roll_count AS REAL) as roll_count
+         FROM player_stats p
+         JOIN game_stats g ON p.recording_id = g.id
+         {}
+         WHERE {}
+         ORDER BY g.created_at ASC",
+        opponent_join, where_clause
+    );
+    
+    let mut stmt = conn.prepare(&query)?;
+    let params_slice: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    
+    let results = stmt.query_map(params_slice.as_slice(), |row| {
+        Ok(TimeSeriesDataPoint {
+            date: row.get::<_, String>(0)?,
+            l_cancel_percent: row.get(1)?,
+            win: row.get::<_, i32>(2)? == 1,
+            inputs_per_minute: row.get(3)?,
+            openings_per_kill: row.get(4)?,
+            damage_per_opening: row.get(5)?,
+            neutral_win_ratio: row.get(6)?,
+            roll_count: row.get(7)?,
+        })
+    })?.collect::<Result<Vec<_>, _>>()?;
+    
+    log::debug!("Time series query returned {} data points for {}", results.len(), connect_code);
+    
+    Ok(results)
 }

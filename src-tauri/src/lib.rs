@@ -21,8 +21,9 @@ use commands::default::{read, write};
 // Library commands
 use commands::library::{
     delete_recording, get_clips, get_player_stats, get_recordings, get_total_player_stats,
-    get_available_filter_options, open_file_location, open_recording_folder, open_video, 
-    refresh_recordings_cache, save_computed_stats, list_slp_files, check_slp_synced,
+    get_available_filter_options, get_player_stats_timeseries, open_file_location, 
+    open_recording_folder, open_video, refresh_recordings_cache, save_computed_stats, 
+    list_slp_files, check_slp_synced,
 };
 // Recording commands
 use commands::recording::{start_generic_recording, start_recording, stop_recording};
@@ -127,6 +128,7 @@ pub fn run() {
             get_player_stats,
             get_total_player_stats,
             get_available_filter_options,
+            get_player_stats_timeseries,
             // Historical sync commands
             list_slp_files,
             check_slp_synced,

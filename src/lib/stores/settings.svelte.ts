@@ -1,4 +1,4 @@
-/**
+	/**
  * Settings store for persisting user preferences.
  * Uses Tauri's plugin-store for cross-session persistence.
  *
@@ -29,8 +29,6 @@ export type Settings = {
 
 	/** Directory where recordings are saved */
 	recordingPath: string;
-	/** Video quality preset for recordings */
-	recordingQuality: "low" | "medium" | "high" | "ultra";
 	/** Whether to auto-start recording when game is detected */
 	autoStartRecording: boolean;
 
@@ -74,8 +72,6 @@ class SettingsStore {
 	theme = $state<Settings["theme"]>("system");
 	/** Recording output directory */
 	recordingPath = $state("");
-	/** Video quality preset */
-	recordingQuality = $state<Settings["recordingQuality"]>("high");
 	/** Auto-start recording on game detection */
 	autoStartRecording = $state(true);
 	/** Slippi replay directory */
@@ -121,7 +117,6 @@ class SettingsStore {
 		const settings = await this.getAll();
 		this.theme = settings.theme;
 		this.recordingPath = settings.recordingPath;
-		this.recordingQuality = settings.recordingQuality;
 		this.autoStartRecording = settings.autoStartRecording;
 		this.slippiPath = settings.slippiPath;
 		this.watchForGames = settings.watchForGames;
@@ -134,7 +129,6 @@ class SettingsStore {
 	private loadDefaults(): void {
 		this.theme = DEFAULT_SETTINGS.theme;
 		this.recordingPath = DEFAULT_SETTINGS.recordingPath;
-		this.recordingQuality = DEFAULT_SETTINGS.recordingQuality;
 		this.autoStartRecording = DEFAULT_SETTINGS.autoStartRecording;
 		this.slippiPath = DEFAULT_SETTINGS.slippiPath;
 		this.watchForGames = DEFAULT_SETTINGS.watchForGames;
@@ -150,7 +144,6 @@ class SettingsStore {
 		return {
 			theme: ((await this.store.get("theme")) as Settings["theme"]) ?? DEFAULT_SETTINGS.theme,
 			recordingPath: ((await this.store.get("recordingPath")) as string) ?? DEFAULT_SETTINGS.recordingPath,
-			recordingQuality: ((await this.store.get("recordingQuality")) as Settings["recordingQuality"]) ?? DEFAULT_SETTINGS.recordingQuality,
 			autoStartRecording: ((await this.store.get("autoStartRecording")) as boolean) ?? DEFAULT_SETTINGS.autoStartRecording,
 			slippiPath: ((await this.store.get("slippiPath")) as string) ?? DEFAULT_SETTINGS.slippiPath,
 			watchForGames: ((await this.store.get("watchForGames")) as boolean) ?? DEFAULT_SETTINGS.watchForGames,
@@ -174,9 +167,6 @@ class SettingsStore {
 				break;
 			case "recordingPath":
 				this.recordingPath = value as string;
-				break;
-			case "recordingQuality":
-				this.recordingQuality = value as Settings["recordingQuality"];
 				break;
 			case "autoStartRecording":
 				this.autoStartRecording = value as boolean;
@@ -215,7 +205,6 @@ class SettingsStore {
 		const keys: (keyof Settings)[] = [
 			"theme",
 			"recordingPath",
-			"recordingQuality",
 			"autoStartRecording",
 			"slippiPath",
 			"watchForGames",

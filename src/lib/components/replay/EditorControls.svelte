@@ -253,14 +253,16 @@
 		<!-- Header -->
 		<div class="flex items-center justify-between">
 			<h3 class="text-sm font-semibold text-foreground">Video Editor</h3>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={() => oncancel?.()}
-				class="h-6 w-6"
-			>
-				<X class="size-4" />
-			</Button>
+			{#if oncancel}
+				<Button
+					variant="ghost"
+					size="icon"
+					onclick={() => oncancel?.()}
+					class="h-6 w-6"
+				>
+					<X class="size-4" />
+				</Button>
+			{/if}
 		</div>
 
 		<!-- Crop Section -->
@@ -375,21 +377,23 @@
 
 		<!-- Action Buttons -->
 		<div class="flex gap-2 border-t border-border pt-3">
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={() => oncancel?.()}
-				class="flex-1 gap-1"
-			>
-				<X class="size-4" />
-				Cancel
-			</Button>
+			{#if oncancel}
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => oncancel?.()}
+					class="flex-1 gap-1"
+				>
+					<X class="size-4" />
+					Cancel
+				</Button>
+			{/if}
 			<Button
 				variant="default"
 				size="sm"
 				onclick={handleReviewChanges}
 				disabled={!hasChanges}
-				class="flex-1 gap-1"
+				class={oncancel ? "flex-1 gap-1" : "w-full gap-1"}
 			>
 				<Check class="size-4" />
 				Review Changes

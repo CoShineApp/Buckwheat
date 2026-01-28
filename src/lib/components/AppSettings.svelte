@@ -202,7 +202,7 @@
 					<Gamepad2 class="size-5" />
 					<CardTitle>Recording</CardTitle>
 				</div>
-				<CardDescription>Configure recording behavior and quality</CardDescription>
+				<CardDescription>Configure recording behavior</CardDescription>
 			</CardHeader>
 			<CardContent class="space-y-6">
 				<div class="space-y-2">
@@ -220,42 +220,6 @@
 						</InputGroupButton>
 					</InputGroup>
 					<p class="text-xs text-muted-foreground">Where recorded videos will be saved</p>
-				</div>
-
-				<Separator />
-
-				<div class="space-y-2">
-					<Label>Recording Quality</Label>
-					<div class="flex gap-2">
-						<Button 
-							variant={settings.recordingQuality === "low" ? "default" : "outline"} 
-							size="sm"
-							onclick={() => settings.set("recordingQuality", "low")}
-						>
-							Low
-						</Button>
-						<Button 
-							variant={settings.recordingQuality === "medium" ? "default" : "outline"} 
-							size="sm"
-							onclick={() => settings.set("recordingQuality", "medium")}
-						>
-							Medium
-						</Button>
-						<Button 
-							variant={settings.recordingQuality === "high" ? "default" : "outline"} 
-							size="sm"
-							onclick={() => settings.set("recordingQuality", "high")}
-						>
-							High
-						</Button>
-						<Button 
-							variant={settings.recordingQuality === "ultra" ? "default" : "outline"} 
-							size="sm"
-							onclick={() => settings.set("recordingQuality", "ultra")}
-						>
-							Ultra
-						</Button>
-					</div>
 				</div>
 
 				<Separator />

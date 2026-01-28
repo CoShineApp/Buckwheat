@@ -4,7 +4,7 @@
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::database::{self, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions};
+use crate::database::{self, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions, TimeSeriesDataPoint};
 use crate::slippi::{PlayerInfo, RecordingSession, SlippiMetadata};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -376,6 +376,26 @@ pub async fn get_available_filter_options(
     
     database::get_available_filter_options(&conn, connect_code.as_deref())
         .map_err(|e| Error::RecordingFailed(format!("Failed to get filter options: {}", e)))
+}
+
+/// Get per-game stats time series for chart visualization
+#[tauri::command]
+pub async fn get_player_stats_timeseries(
+    connect_code: String,
+    filter: Option<StatsFilter>,
+    state: State<'_, AppState>,
+) -> Result<Vec<TimeSeriesDataPoint>, Error> {
+    log::debug!(
+        "Getting time series stats for {} with filter: {:?}", 
+        connect_code, 
+        filter
+    );
+    
+    let db = state.database.clone();
+    let conn = db.connection();
+    
+    database::get_player_stats_timeseries(&conn, &connect_code, filter)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get time series stats: {}", e)))
 }
 
 /// List all .slp files in a directory (recursive, up to 5 levels deep)

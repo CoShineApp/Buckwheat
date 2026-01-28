@@ -311,6 +311,18 @@ pub fn process_video_edit(
 
     match result {
         Ok(mut child) => {
+            // Collect stderr for error reporting
+            let mut stderr_output = String::new();
+            if let Some(stderr) = child.take_stderr() {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    log::debug!("FFmpeg: {}", line);
+                    stderr_output.push_str(&line);
+                    stderr_output.push('\n');
+                }
+            }
+            
             let status = child
                 .wait()
                 .map_err(|e| Error::RecordingFailed(format!("FFmpeg process error: {}", e)))?;
@@ -319,9 +331,21 @@ pub fn process_video_edit(
                 log::info!("✅ Video edit processed successfully: {}", output_path);
                 Ok(())
             } else {
+                // Include last few lines of FFmpeg output for debugging
+                let last_lines: String = stderr_output
+                    .lines()
+                    .rev()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                log::error!("FFmpeg failed. Last output:\n{}", last_lines);
                 Err(Error::RecordingFailed(format!(
-                    "FFmpeg edit failed with status: {:?}",
-                    status
+                    "FFmpeg edit failed with status: {:?}. Output: {}",
+                    status,
+                    last_lines
                 )))
             }
         }
