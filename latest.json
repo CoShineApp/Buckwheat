@@ -1,11 +1,12 @@
 {
-    "version": "1.0.0",
-    "notes": "Initial release",
+    "version": "1.0.1",
+    "notes": "Fixed a couple of bugs w.r.t cropping, trimming, stats, and added a graph and removed recording settings",
     "pub_date": "2026-01-28T00:00:00Z",
     "platforms": {
       "windows-x86_64": {
-        "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSnUzT0dsRkNoMW9SbG5QT3p3eHI3NXQ5ZmpSTVNaUjJQRERnLzMveGI4QVhkZlA0eTdvelBZWWJxSjNDUDFIaG52djZ2dWlocnFLYkZTU0NzSU42U2wyZHpPQjFaUlFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY5NTYwNzE0CWZpbGU6UGVwcGlfMS4wLjBfeDY0X2VuLVVTLm1zaQo1dERaVjFKQXpVV1hERXh5NlFBUThpaEJmZXRjTmk1OEpxbklLTHQrYlBpNVJhNzBvTGRPUkVKVFJWM21WZXdsb0JWTTBlRFlXUFRsN3RZdnZrWHJBdz09Cg==",
-        "url": "https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev/Peppi_1.0.0_x64_en-US.msi.zip"
+        "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSnUzT0dsRkNoMW5paUVlbEpYQ3F1VFVJQjZHY1J0WUd0N0xpM0pkamMxYURUbEhDOWV5ejVEU2lmRFNreHEwN3hNdmozSXRuLzhVZWdxT0lvcjdxeEMxeXNGanMwclFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY5NTczMzIzCWZpbGU6UGVwcGlfMS4wLjFfeDY0X2VuLVVTLm1zaS56aXAKZWZZeFNsOHdIL2hQQ203YWQxcWdxMWxrQnNnYWR2SkE4NkhNTlJMYnQ0UGRlNDJSS2tTUFZTS2JNYXRuWkVoamRidGFMUHc5RW85TEJwbVBjUnVUQ3c9PQo=",
+        "url": "https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev/msi/Peppi_1.0.1_x64_en-US.msi.zip"
       }
     }
 }
+git

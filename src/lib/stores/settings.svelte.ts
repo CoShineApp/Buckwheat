@@ -50,7 +50,6 @@ export type Settings = {
 const DEFAULT_SETTINGS: Settings = {
 	theme: "system",
 	recordingPath: "",
-	recordingQuality: "high",
 	autoStartRecording: true,
 	slippiPath: "",
 	watchForGames: true,
