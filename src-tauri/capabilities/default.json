@@ -53,6 +53,8 @@
 	  "fs:allow-video-read-recursive",
 	  "fs:allow-document-read-recursive",
 	  "fs:allow-download-read-recursive",
-	  "fs:allow-desktop-read-recursive"
+	  "updater:default",
+	  "process:allow-restart",
+	  "process:allow-exit"
 	]
 }

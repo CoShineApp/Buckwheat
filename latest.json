@@ -1,0 +1,11 @@
+{
+    "version": "1.0.0",
+    "notes": "Initial release",
+    "pub_date": "2026-01-28T00:00:00Z",
+    "platforms": {
+      "windows-x86_64": {
+        "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSnUzT0dsRkNoMXNLR2JvYUdnTHVmQ0NxYWdlSDAxRHppOGVjMy9ld2xCNTBiSFBjbWlsT1lIUFlFQnVDRFpRL1R4NEtDbnRleHkyd1NlZngxcTFSbnZJSFVtWUtxTFE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzY5NTU5NDg2CWZpbGU6UGVwcGlfMS4wLjBfeDY0X2VuLVVTLm1zaQpEWlYxN2N6UkF4WjJRSDdreVNMb3MydVcxbVFKRGlLajNWamZZbmxXTDV2Wi85R3lvSHArV0hldG5zR1l6OGMwVXhMTzR3ampGaFVFQVVoc1AzR0dDUT09Cg==",
+        "url": "https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev/Peppi_1.0.0_x64_en-US.msi.zip"
+      }
+    }
+}

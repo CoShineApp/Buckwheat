@@ -21,6 +21,7 @@
 	import { recording } from "$lib/stores/recording.svelte";
 	import { auth } from "$lib/stores/auth.svelte";
 	import AuthModal from "$lib/components/auth/AuthModal.svelte";
+	import UpdateNotification from "$lib/components/UpdateNotification.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import { onMount, onDestroy } from "svelte";
 	import { checkGameWindow, listGameWindows, getGameProcessName, setGameProcessName } from "$lib/commands";
@@ -386,3 +387,4 @@
 </SidebarProvider>
 
 <AuthModal bind:open={showAuthModal} />
+<UpdateNotification />
