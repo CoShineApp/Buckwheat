@@ -92,6 +92,44 @@ pub struct PlayerStatsRow {
     pub wall_jump_tech_count: i32,
     pub l_cancel_success_count: i32,
     pub l_cancel_fail_count: i32,
+    // L-Cancel detailed breakdown: per aerial x target x outcome
+    // Nair
+    pub l_cancel_nair_shield_success: i32,
+    pub l_cancel_nair_shield_fail: i32,
+    pub l_cancel_nair_whiff_success: i32,
+    pub l_cancel_nair_whiff_fail: i32,
+    pub l_cancel_nair_hit_success: i32,
+    pub l_cancel_nair_hit_fail: i32,
+    // Fair
+    pub l_cancel_fair_shield_success: i32,
+    pub l_cancel_fair_shield_fail: i32,
+    pub l_cancel_fair_whiff_success: i32,
+    pub l_cancel_fair_whiff_fail: i32,
+    pub l_cancel_fair_hit_success: i32,
+    pub l_cancel_fair_hit_fail: i32,
+    // Bair
+    pub l_cancel_bair_shield_success: i32,
+    pub l_cancel_bair_shield_fail: i32,
+    pub l_cancel_bair_whiff_success: i32,
+    pub l_cancel_bair_whiff_fail: i32,
+    pub l_cancel_bair_hit_success: i32,
+    pub l_cancel_bair_hit_fail: i32,
+    // Uair
+    pub l_cancel_uair_shield_success: i32,
+    pub l_cancel_uair_shield_fail: i32,
+    pub l_cancel_uair_whiff_success: i32,
+    pub l_cancel_uair_whiff_fail: i32,
+    pub l_cancel_uair_hit_success: i32,
+    pub l_cancel_uair_hit_fail: i32,
+    // Dair
+    pub l_cancel_dair_shield_success: i32,
+    pub l_cancel_dair_shield_fail: i32,
+    pub l_cancel_dair_whiff_success: i32,
+    pub l_cancel_dair_whiff_fail: i32,
+    pub l_cancel_dair_hit_success: i32,
+    pub l_cancel_dair_hit_fail: i32,
+    // Shield grab (placeholder for now)
+    pub shield_grab_count: i32,
     pub stocks_remaining: i32,
     pub final_percent: Option<f64>,
     /// Path to .slp file - for historical games that don't have a recording
@@ -217,8 +255,23 @@ pub fn get_recordings_paginated(
                     wavedash_count, waveland_count, air_dodge_count, dash_dance_count,
                     spot_dodge_count, ledgegrab_count, roll_count, grab_count, throw_count,
                     ground_tech_count, wall_tech_count, wall_jump_tech_count,
-                    l_cancel_success_count, l_cancel_fail_count, stocks_remaining, final_percent,
-                    slp_path
+                    l_cancel_success_count, l_cancel_fail_count,
+                    l_cancel_nair_shield_success, l_cancel_nair_shield_fail,
+                    l_cancel_nair_whiff_success, l_cancel_nair_whiff_fail,
+                    l_cancel_nair_hit_success, l_cancel_nair_hit_fail,
+                    l_cancel_fair_shield_success, l_cancel_fair_shield_fail,
+                    l_cancel_fair_whiff_success, l_cancel_fair_whiff_fail,
+                    l_cancel_fair_hit_success, l_cancel_fair_hit_fail,
+                    l_cancel_bair_shield_success, l_cancel_bair_shield_fail,
+                    l_cancel_bair_whiff_success, l_cancel_bair_whiff_fail,
+                    l_cancel_bair_hit_success, l_cancel_bair_hit_fail,
+                    l_cancel_uair_shield_success, l_cancel_uair_shield_fail,
+                    l_cancel_uair_whiff_success, l_cancel_uair_whiff_fail,
+                    l_cancel_uair_hit_success, l_cancel_uair_hit_fail,
+                    l_cancel_dair_shield_success, l_cancel_dair_shield_fail,
+                    l_cancel_dair_whiff_success, l_cancel_dair_whiff_fail,
+                    l_cancel_dair_hit_success, l_cancel_dair_hit_fail,
+                    shield_grab_count, stocks_remaining, final_percent, slp_path
              FROM player_stats 
              WHERE recording_id IN ({})
              ORDER BY recording_id, player_index",
@@ -264,9 +317,41 @@ pub fn get_recordings_paginated(
                 wall_jump_tech_count: row.get(31)?,
                 l_cancel_success_count: row.get(32)?,
                 l_cancel_fail_count: row.get(33)?,
-                stocks_remaining: row.get(34)?,
-                final_percent: row.get(35)?,
-                slp_path: row.get(36)?,
+                // L-Cancel detailed breakdown
+                l_cancel_nair_shield_success: row.get(34)?,
+                l_cancel_nair_shield_fail: row.get(35)?,
+                l_cancel_nair_whiff_success: row.get(36)?,
+                l_cancel_nair_whiff_fail: row.get(37)?,
+                l_cancel_nair_hit_success: row.get(38)?,
+                l_cancel_nair_hit_fail: row.get(39)?,
+                l_cancel_fair_shield_success: row.get(40)?,
+                l_cancel_fair_shield_fail: row.get(41)?,
+                l_cancel_fair_whiff_success: row.get(42)?,
+                l_cancel_fair_whiff_fail: row.get(43)?,
+                l_cancel_fair_hit_success: row.get(44)?,
+                l_cancel_fair_hit_fail: row.get(45)?,
+                l_cancel_bair_shield_success: row.get(46)?,
+                l_cancel_bair_shield_fail: row.get(47)?,
+                l_cancel_bair_whiff_success: row.get(48)?,
+                l_cancel_bair_whiff_fail: row.get(49)?,
+                l_cancel_bair_hit_success: row.get(50)?,
+                l_cancel_bair_hit_fail: row.get(51)?,
+                l_cancel_uair_shield_success: row.get(52)?,
+                l_cancel_uair_shield_fail: row.get(53)?,
+                l_cancel_uair_whiff_success: row.get(54)?,
+                l_cancel_uair_whiff_fail: row.get(55)?,
+                l_cancel_uair_hit_success: row.get(56)?,
+                l_cancel_uair_hit_fail: row.get(57)?,
+                l_cancel_dair_shield_success: row.get(58)?,
+                l_cancel_dair_shield_fail: row.get(59)?,
+                l_cancel_dair_whiff_success: row.get(60)?,
+                l_cancel_dair_whiff_fail: row.get(61)?,
+                l_cancel_dair_hit_success: row.get(62)?,
+                l_cancel_dair_hit_fail: row.get(63)?,
+                shield_grab_count: row.get(64)?,
+                stocks_remaining: row.get(65)?,
+                final_percent: row.get(66)?,
+                slp_path: row.get(67)?,
             })
         })?;
         
@@ -429,10 +514,28 @@ pub fn upsert_player_stats(conn: &Connection, stats: &PlayerStatsRow) -> rusqlit
             inputs_total, inputs_per_minute, avg_kill_percent,
             wavedash_count, waveland_count, air_dodge_count, dash_dance_count, spot_dodge_count, ledgegrab_count,
             roll_count, grab_count, throw_count, ground_tech_count, wall_tech_count, wall_jump_tech_count,
-            l_cancel_success_count, l_cancel_fail_count, stocks_remaining, final_percent, slp_path
+            l_cancel_success_count, l_cancel_fail_count,
+            l_cancel_nair_shield_success, l_cancel_nair_shield_fail,
+            l_cancel_nair_whiff_success, l_cancel_nair_whiff_fail,
+            l_cancel_nair_hit_success, l_cancel_nair_hit_fail,
+            l_cancel_fair_shield_success, l_cancel_fair_shield_fail,
+            l_cancel_fair_whiff_success, l_cancel_fair_whiff_fail,
+            l_cancel_fair_hit_success, l_cancel_fair_hit_fail,
+            l_cancel_bair_shield_success, l_cancel_bair_shield_fail,
+            l_cancel_bair_whiff_success, l_cancel_bair_whiff_fail,
+            l_cancel_bair_hit_success, l_cancel_bair_hit_fail,
+            l_cancel_uair_shield_success, l_cancel_uair_shield_fail,
+            l_cancel_uair_whiff_success, l_cancel_uair_whiff_fail,
+            l_cancel_uair_hit_success, l_cancel_uair_hit_fail,
+            l_cancel_dair_shield_success, l_cancel_dair_shield_fail,
+            l_cancel_dair_whiff_success, l_cancel_dair_whiff_fail,
+            l_cancel_dair_hit_success, l_cancel_dair_hit_fail,
+            shield_grab_count, stocks_remaining, final_percent, slp_path
         ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-            ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36
+            ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
+            ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49,
+            ?50, ?51, ?52, ?53, ?54, ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67
         )
         ON CONFLICT(recording_id, player_index) DO UPDATE SET
             connect_code = excluded.connect_code,
@@ -466,6 +569,37 @@ pub fn upsert_player_stats(conn: &Connection, stats: &PlayerStatsRow) -> rusqlit
             wall_jump_tech_count = excluded.wall_jump_tech_count,
             l_cancel_success_count = excluded.l_cancel_success_count,
             l_cancel_fail_count = excluded.l_cancel_fail_count,
+            l_cancel_nair_shield_success = excluded.l_cancel_nair_shield_success,
+            l_cancel_nair_shield_fail = excluded.l_cancel_nair_shield_fail,
+            l_cancel_nair_whiff_success = excluded.l_cancel_nair_whiff_success,
+            l_cancel_nair_whiff_fail = excluded.l_cancel_nair_whiff_fail,
+            l_cancel_nair_hit_success = excluded.l_cancel_nair_hit_success,
+            l_cancel_nair_hit_fail = excluded.l_cancel_nair_hit_fail,
+            l_cancel_fair_shield_success = excluded.l_cancel_fair_shield_success,
+            l_cancel_fair_shield_fail = excluded.l_cancel_fair_shield_fail,
+            l_cancel_fair_whiff_success = excluded.l_cancel_fair_whiff_success,
+            l_cancel_fair_whiff_fail = excluded.l_cancel_fair_whiff_fail,
+            l_cancel_fair_hit_success = excluded.l_cancel_fair_hit_success,
+            l_cancel_fair_hit_fail = excluded.l_cancel_fair_hit_fail,
+            l_cancel_bair_shield_success = excluded.l_cancel_bair_shield_success,
+            l_cancel_bair_shield_fail = excluded.l_cancel_bair_shield_fail,
+            l_cancel_bair_whiff_success = excluded.l_cancel_bair_whiff_success,
+            l_cancel_bair_whiff_fail = excluded.l_cancel_bair_whiff_fail,
+            l_cancel_bair_hit_success = excluded.l_cancel_bair_hit_success,
+            l_cancel_bair_hit_fail = excluded.l_cancel_bair_hit_fail,
+            l_cancel_uair_shield_success = excluded.l_cancel_uair_shield_success,
+            l_cancel_uair_shield_fail = excluded.l_cancel_uair_shield_fail,
+            l_cancel_uair_whiff_success = excluded.l_cancel_uair_whiff_success,
+            l_cancel_uair_whiff_fail = excluded.l_cancel_uair_whiff_fail,
+            l_cancel_uair_hit_success = excluded.l_cancel_uair_hit_success,
+            l_cancel_uair_hit_fail = excluded.l_cancel_uair_hit_fail,
+            l_cancel_dair_shield_success = excluded.l_cancel_dair_shield_success,
+            l_cancel_dair_shield_fail = excluded.l_cancel_dair_shield_fail,
+            l_cancel_dair_whiff_success = excluded.l_cancel_dair_whiff_success,
+            l_cancel_dair_whiff_fail = excluded.l_cancel_dair_whiff_fail,
+            l_cancel_dair_hit_success = excluded.l_cancel_dair_hit_success,
+            l_cancel_dair_hit_fail = excluded.l_cancel_dair_hit_fail,
+            shield_grab_count = excluded.shield_grab_count,
             stocks_remaining = excluded.stocks_remaining,
             final_percent = excluded.final_percent,
             slp_path = excluded.slp_path",
@@ -503,6 +637,37 @@ pub fn upsert_player_stats(conn: &Connection, stats: &PlayerStatsRow) -> rusqlit
             stats.wall_jump_tech_count,
             stats.l_cancel_success_count,
             stats.l_cancel_fail_count,
+            stats.l_cancel_nair_shield_success,
+            stats.l_cancel_nair_shield_fail,
+            stats.l_cancel_nair_whiff_success,
+            stats.l_cancel_nair_whiff_fail,
+            stats.l_cancel_nair_hit_success,
+            stats.l_cancel_nair_hit_fail,
+            stats.l_cancel_fair_shield_success,
+            stats.l_cancel_fair_shield_fail,
+            stats.l_cancel_fair_whiff_success,
+            stats.l_cancel_fair_whiff_fail,
+            stats.l_cancel_fair_hit_success,
+            stats.l_cancel_fair_hit_fail,
+            stats.l_cancel_bair_shield_success,
+            stats.l_cancel_bair_shield_fail,
+            stats.l_cancel_bair_whiff_success,
+            stats.l_cancel_bair_whiff_fail,
+            stats.l_cancel_bair_hit_success,
+            stats.l_cancel_bair_hit_fail,
+            stats.l_cancel_uair_shield_success,
+            stats.l_cancel_uair_shield_fail,
+            stats.l_cancel_uair_whiff_success,
+            stats.l_cancel_uair_whiff_fail,
+            stats.l_cancel_uair_hit_success,
+            stats.l_cancel_uair_hit_fail,
+            stats.l_cancel_dair_shield_success,
+            stats.l_cancel_dair_shield_fail,
+            stats.l_cancel_dair_whiff_success,
+            stats.l_cancel_dair_whiff_fail,
+            stats.l_cancel_dair_hit_success,
+            stats.l_cancel_dair_hit_fail,
+            stats.shield_grab_count,
             stats.stocks_remaining,
             stats.final_percent,
             stats.slp_path,
@@ -520,7 +685,23 @@ pub fn get_player_stats_by_recording(conn: &Connection, recording_id: &str) -> r
                 inputs_total, inputs_per_minute, avg_kill_percent,
                 wavedash_count, waveland_count, air_dodge_count, dash_dance_count, spot_dodge_count, ledgegrab_count,
                 roll_count, grab_count, throw_count, ground_tech_count, wall_tech_count, wall_jump_tech_count,
-                l_cancel_success_count, l_cancel_fail_count, stocks_remaining, final_percent, slp_path
+                l_cancel_success_count, l_cancel_fail_count,
+                l_cancel_nair_shield_success, l_cancel_nair_shield_fail,
+                l_cancel_nair_whiff_success, l_cancel_nair_whiff_fail,
+                l_cancel_nair_hit_success, l_cancel_nair_hit_fail,
+                l_cancel_fair_shield_success, l_cancel_fair_shield_fail,
+                l_cancel_fair_whiff_success, l_cancel_fair_whiff_fail,
+                l_cancel_fair_hit_success, l_cancel_fair_hit_fail,
+                l_cancel_bair_shield_success, l_cancel_bair_shield_fail,
+                l_cancel_bair_whiff_success, l_cancel_bair_whiff_fail,
+                l_cancel_bair_hit_success, l_cancel_bair_hit_fail,
+                l_cancel_uair_shield_success, l_cancel_uair_shield_fail,
+                l_cancel_uair_whiff_success, l_cancel_uair_whiff_fail,
+                l_cancel_uair_hit_success, l_cancel_uair_hit_fail,
+                l_cancel_dair_shield_success, l_cancel_dair_shield_fail,
+                l_cancel_dair_whiff_success, l_cancel_dair_whiff_fail,
+                l_cancel_dair_hit_success, l_cancel_dair_hit_fail,
+                shield_grab_count, stocks_remaining, final_percent, slp_path
          FROM player_stats WHERE recording_id = ? ORDER BY player_index"
     )?;
     
@@ -560,9 +741,41 @@ pub fn get_player_stats_by_recording(conn: &Connection, recording_id: &str) -> r
             wall_jump_tech_count: row.get(31)?,
             l_cancel_success_count: row.get(32)?,
             l_cancel_fail_count: row.get(33)?,
-            stocks_remaining: row.get(34)?,
-            final_percent: row.get(35)?,
-            slp_path: row.get(36)?,
+            // L-Cancel detailed breakdown
+            l_cancel_nair_shield_success: row.get(34)?,
+            l_cancel_nair_shield_fail: row.get(35)?,
+            l_cancel_nair_whiff_success: row.get(36)?,
+            l_cancel_nair_whiff_fail: row.get(37)?,
+            l_cancel_nair_hit_success: row.get(38)?,
+            l_cancel_nair_hit_fail: row.get(39)?,
+            l_cancel_fair_shield_success: row.get(40)?,
+            l_cancel_fair_shield_fail: row.get(41)?,
+            l_cancel_fair_whiff_success: row.get(42)?,
+            l_cancel_fair_whiff_fail: row.get(43)?,
+            l_cancel_fair_hit_success: row.get(44)?,
+            l_cancel_fair_hit_fail: row.get(45)?,
+            l_cancel_bair_shield_success: row.get(46)?,
+            l_cancel_bair_shield_fail: row.get(47)?,
+            l_cancel_bair_whiff_success: row.get(48)?,
+            l_cancel_bair_whiff_fail: row.get(49)?,
+            l_cancel_bair_hit_success: row.get(50)?,
+            l_cancel_bair_hit_fail: row.get(51)?,
+            l_cancel_uair_shield_success: row.get(52)?,
+            l_cancel_uair_shield_fail: row.get(53)?,
+            l_cancel_uair_whiff_success: row.get(54)?,
+            l_cancel_uair_whiff_fail: row.get(55)?,
+            l_cancel_uair_hit_success: row.get(56)?,
+            l_cancel_uair_hit_fail: row.get(57)?,
+            l_cancel_dair_shield_success: row.get(58)?,
+            l_cancel_dair_shield_fail: row.get(59)?,
+            l_cancel_dair_whiff_success: row.get(60)?,
+            l_cancel_dair_whiff_fail: row.get(61)?,
+            l_cancel_dair_hit_success: row.get(62)?,
+            l_cancel_dair_hit_fail: row.get(63)?,
+            shield_grab_count: row.get(64)?,
+            stocks_remaining: row.get(65)?,
+            final_percent: row.get(66)?,
+            slp_path: row.get(67)?,
         })
     })?;
     
@@ -587,6 +800,51 @@ pub struct StatsFilter {
     pub start_time: Option<String>,
     /// Filter by end time (ISO8601 format, games before this time)
     pub end_time: Option<String>,
+    /// Filter by opponent's connect code (e.g., "MANG#0")
+    pub opponent_connect_code: Option<String>,
+}
+
+/// Per-aerial breakdown of L-cancels by target type
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AerialLCancelStats {
+    pub percent: f64,
+    pub success: i64,
+    pub total: i64,
+    // Per-target breakdown for this aerial
+    pub hit_success: i64,
+    pub hit_fail: i64,
+    pub shield_success: i64,
+    pub shield_fail: i64,
+    pub whiff_success: i64,
+    pub whiff_fail: i64,
+}
+
+/// L-Cancel breakdown by aerial (with per-target detail for each)
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LCancelAerialBreakdown {
+    pub nair: AerialLCancelStats,
+    pub fair: AerialLCancelStats,
+    pub bair: AerialLCancelStats,
+    pub uair: AerialLCancelStats,
+    pub dair: AerialLCancelStats,
+}
+
+/// L-Cancel breakdown by target type
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LCancelTargetBreakdown {
+    pub hit_percent: f64,
+    pub shield_percent: f64,
+    pub whiff_percent: f64,
+    // Raw counts for display
+    pub hit_success: i64,
+    pub hit_total: i64,
+    pub shield_success: i64,
+    pub shield_total: i64,
+    pub whiff_success: i64,
+    pub whiff_total: i64,
 }
 
 /// Aggregated stats for a player
@@ -603,6 +861,9 @@ pub struct AggregatedPlayerStats {
     pub avg_inputs_per_minute: f64,
     pub character_stats: Vec<CharacterWinRate>,
     pub stage_stats: Vec<StageWinRate>,
+    // L-Cancel breakdown
+    pub l_cancel_by_aerial: LCancelAerialBreakdown,
+    pub l_cancel_by_target: LCancelTargetBreakdown,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -682,8 +943,9 @@ pub fn get_aggregated_player_stats(
         param_idx += 1;
     }
     
-    // Opponent character filter requires join with opponent player_stats
-    let opponent_join = if filter.opponent_character_id.is_some() {
+    // Opponent filters require join with opponent player_stats
+    let needs_opponent_join = filter.opponent_character_id.is_some() || filter.opponent_connect_code.is_some();
+    let opponent_join = if needs_opponent_join {
         "JOIN player_stats opp_filter ON p.recording_id = opp_filter.recording_id AND opp_filter.player_index != p.player_index"
     } else {
         ""
@@ -692,6 +954,12 @@ pub fn get_aggregated_player_stats(
     if let Some(opp_char) = filter.opponent_character_id {
         where_clauses.push(format!("opp_filter.character_id = ?{}", param_idx));
         params_vec.push(Box::new(opp_char));
+        param_idx += 1;
+    }
+    
+    if let Some(ref opp_code) = filter.opponent_connect_code {
+        where_clauses.push(format!("opp_filter.connect_code = ?{}", param_idx));
+        params_vec.push(Box::new(opp_code.clone()));
         // param_idx not incremented since not used after this
     }
     
@@ -724,8 +992,9 @@ pub fn get_aggregated_player_stats(
         opponent_join, where_clause
     );
     
-    log::debug!("[TotalStats] Query: {}", overall_query);
-    log::debug!("[TotalStats] Where clause: {}", where_clause);
+    log::info!("[TotalStats] Query: {}", overall_query);
+    log::info!("[TotalStats] Where clause: {}", where_clause);
+    log::info!("[TotalStats] Opponent join: '{}'", opponent_join);
     
     let mut stmt = conn.prepare(&overall_query)?;
     
@@ -818,6 +1087,153 @@ pub fn get_aggregated_player_stats(
         })
     })?.collect::<Result<Vec<_>, _>>()?;
 
+    // 4. L-Cancel breakdown by aerial (with per-target detail)
+    // Use p. prefix on all columns to avoid ambiguity when opponent_join adds another player_stats table
+    let lcancel_aerial_query = format!(
+        "SELECT 
+            -- Nair
+            SUM(p.l_cancel_nair_hit_success) as nair_hit_success,
+            SUM(p.l_cancel_nair_hit_fail) as nair_hit_fail,
+            SUM(p.l_cancel_nair_shield_success) as nair_shield_success,
+            SUM(p.l_cancel_nair_shield_fail) as nair_shield_fail,
+            SUM(p.l_cancel_nair_whiff_success) as nair_whiff_success,
+            SUM(p.l_cancel_nair_whiff_fail) as nair_whiff_fail,
+            -- Fair
+            SUM(p.l_cancel_fair_hit_success) as fair_hit_success,
+            SUM(p.l_cancel_fair_hit_fail) as fair_hit_fail,
+            SUM(p.l_cancel_fair_shield_success) as fair_shield_success,
+            SUM(p.l_cancel_fair_shield_fail) as fair_shield_fail,
+            SUM(p.l_cancel_fair_whiff_success) as fair_whiff_success,
+            SUM(p.l_cancel_fair_whiff_fail) as fair_whiff_fail,
+            -- Bair
+            SUM(p.l_cancel_bair_hit_success) as bair_hit_success,
+            SUM(p.l_cancel_bair_hit_fail) as bair_hit_fail,
+            SUM(p.l_cancel_bair_shield_success) as bair_shield_success,
+            SUM(p.l_cancel_bair_shield_fail) as bair_shield_fail,
+            SUM(p.l_cancel_bair_whiff_success) as bair_whiff_success,
+            SUM(p.l_cancel_bair_whiff_fail) as bair_whiff_fail,
+            -- Uair
+            SUM(p.l_cancel_uair_hit_success) as uair_hit_success,
+            SUM(p.l_cancel_uair_hit_fail) as uair_hit_fail,
+            SUM(p.l_cancel_uair_shield_success) as uair_shield_success,
+            SUM(p.l_cancel_uair_shield_fail) as uair_shield_fail,
+            SUM(p.l_cancel_uair_whiff_success) as uair_whiff_success,
+            SUM(p.l_cancel_uair_whiff_fail) as uair_whiff_fail,
+            -- Dair
+            SUM(p.l_cancel_dair_hit_success) as dair_hit_success,
+            SUM(p.l_cancel_dair_hit_fail) as dair_hit_fail,
+            SUM(p.l_cancel_dair_shield_success) as dair_shield_success,
+            SUM(p.l_cancel_dair_shield_fail) as dair_shield_fail,
+            SUM(p.l_cancel_dair_whiff_success) as dair_whiff_success,
+            SUM(p.l_cancel_dair_whiff_fail) as dair_whiff_fail
+         FROM player_stats p
+         JOIN game_stats g ON p.recording_id = g.id
+         {}
+         WHERE {}",
+        opponent_join, where_clause
+    );
+    
+    let mut stmt = conn.prepare(&lcancel_aerial_query)?;
+    let params_slice: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    
+    let l_cancel_by_aerial = stmt.query_row(params_slice.as_slice(), |row| {
+        // Helper to build AerialLCancelStats from row data
+        fn build_aerial_stats(
+            hit_success: i64, hit_fail: i64,
+            shield_success: i64, shield_fail: i64,
+            whiff_success: i64, whiff_fail: i64,
+        ) -> AerialLCancelStats {
+            let success = hit_success + shield_success + whiff_success;
+            let total = success + hit_fail + shield_fail + whiff_fail;
+            AerialLCancelStats {
+                percent: if total > 0 { (success as f64 / total as f64) * 100.0 } else { 0.0 },
+                success,
+                total,
+                hit_success, hit_fail,
+                shield_success, shield_fail,
+                whiff_success, whiff_fail,
+            }
+        }
+        
+        Ok(LCancelAerialBreakdown {
+            nair: build_aerial_stats(
+                row.get::<_, Option<i64>>(0)?.unwrap_or(0), row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(2)?.unwrap_or(0), row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(4)?.unwrap_or(0), row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+            ),
+            fair: build_aerial_stats(
+                row.get::<_, Option<i64>>(6)?.unwrap_or(0), row.get::<_, Option<i64>>(7)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(8)?.unwrap_or(0), row.get::<_, Option<i64>>(9)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(10)?.unwrap_or(0), row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+            ),
+            bair: build_aerial_stats(
+                row.get::<_, Option<i64>>(12)?.unwrap_or(0), row.get::<_, Option<i64>>(13)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(14)?.unwrap_or(0), row.get::<_, Option<i64>>(15)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(16)?.unwrap_or(0), row.get::<_, Option<i64>>(17)?.unwrap_or(0),
+            ),
+            uair: build_aerial_stats(
+                row.get::<_, Option<i64>>(18)?.unwrap_or(0), row.get::<_, Option<i64>>(19)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(20)?.unwrap_or(0), row.get::<_, Option<i64>>(21)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(22)?.unwrap_or(0), row.get::<_, Option<i64>>(23)?.unwrap_or(0),
+            ),
+            dair: build_aerial_stats(
+                row.get::<_, Option<i64>>(24)?.unwrap_or(0), row.get::<_, Option<i64>>(25)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(26)?.unwrap_or(0), row.get::<_, Option<i64>>(27)?.unwrap_or(0),
+                row.get::<_, Option<i64>>(28)?.unwrap_or(0), row.get::<_, Option<i64>>(29)?.unwrap_or(0),
+            ),
+        })
+    }).unwrap_or_default();
+
+    // 5. L-Cancel breakdown by target type
+    // Use p. prefix on all columns to avoid ambiguity when opponent_join adds another player_stats table
+    let lcancel_target_query = format!(
+        "SELECT 
+            SUM(p.l_cancel_nair_hit_success + p.l_cancel_fair_hit_success + p.l_cancel_bair_hit_success + 
+                p.l_cancel_uair_hit_success + p.l_cancel_dair_hit_success) as hit_success,
+            SUM(p.l_cancel_nair_hit_success + p.l_cancel_fair_hit_success + p.l_cancel_bair_hit_success + 
+                p.l_cancel_uair_hit_success + p.l_cancel_dair_hit_success +
+                p.l_cancel_nair_hit_fail + p.l_cancel_fair_hit_fail + p.l_cancel_bair_hit_fail + 
+                p.l_cancel_uair_hit_fail + p.l_cancel_dair_hit_fail) as hit_total,
+            SUM(p.l_cancel_nair_shield_success + p.l_cancel_fair_shield_success + p.l_cancel_bair_shield_success + 
+                p.l_cancel_uair_shield_success + p.l_cancel_dair_shield_success) as shield_success,
+            SUM(p.l_cancel_nair_shield_success + p.l_cancel_fair_shield_success + p.l_cancel_bair_shield_success + 
+                p.l_cancel_uair_shield_success + p.l_cancel_dair_shield_success +
+                p.l_cancel_nair_shield_fail + p.l_cancel_fair_shield_fail + p.l_cancel_bair_shield_fail + 
+                p.l_cancel_uair_shield_fail + p.l_cancel_dair_shield_fail) as shield_total,
+            SUM(p.l_cancel_nair_whiff_success + p.l_cancel_fair_whiff_success + p.l_cancel_bair_whiff_success + 
+                p.l_cancel_uair_whiff_success + p.l_cancel_dair_whiff_success) as whiff_success,
+            SUM(p.l_cancel_nair_whiff_success + p.l_cancel_fair_whiff_success + p.l_cancel_bair_whiff_success + 
+                p.l_cancel_uair_whiff_success + p.l_cancel_dair_whiff_success +
+                p.l_cancel_nair_whiff_fail + p.l_cancel_fair_whiff_fail + p.l_cancel_bair_whiff_fail + 
+                p.l_cancel_uair_whiff_fail + p.l_cancel_dair_whiff_fail) as whiff_total
+         FROM player_stats p
+         JOIN game_stats g ON p.recording_id = g.id
+         {}
+         WHERE {}",
+        opponent_join, where_clause
+    );
+    
+    let mut stmt = conn.prepare(&lcancel_target_query)?;
+    let params_slice: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    
+    let l_cancel_by_target = stmt.query_row(params_slice.as_slice(), |row| {
+        let hit_success: i64 = row.get::<_, Option<i64>>(0)?.unwrap_or(0);
+        let hit_total: i64 = row.get::<_, Option<i64>>(1)?.unwrap_or(0);
+        let shield_success: i64 = row.get::<_, Option<i64>>(2)?.unwrap_or(0);
+        let shield_total: i64 = row.get::<_, Option<i64>>(3)?.unwrap_or(0);
+        let whiff_success: i64 = row.get::<_, Option<i64>>(4)?.unwrap_or(0);
+        let whiff_total: i64 = row.get::<_, Option<i64>>(5)?.unwrap_or(0);
+        
+        Ok(LCancelTargetBreakdown {
+            hit_percent: if hit_total > 0 { (hit_success as f64 / hit_total as f64) * 100.0 } else { 0.0 },
+            shield_percent: if shield_total > 0 { (shield_success as f64 / shield_total as f64) * 100.0 } else { 0.0 },
+            whiff_percent: if whiff_total > 0 { (whiff_success as f64 / whiff_total as f64) * 100.0 } else { 0.0 },
+            hit_success, hit_total,
+            shield_success, shield_total,
+            whiff_success, whiff_total,
+        })
+    }).unwrap_or_default();
+
     Ok(AggregatedPlayerStats {
         total_games,
         total_wins,
@@ -829,6 +1245,8 @@ pub fn get_aggregated_player_stats(
         avg_inputs_per_minute: avg_ipm,
         character_stats,
         stage_stats,
+        l_cancel_by_aerial,
+        l_cancel_by_target,
     })
 }
 
@@ -968,8 +1386,9 @@ pub fn get_player_stats_timeseries(
         param_idx += 1;
     }
     
-    // Handle opponent character filter
-    let opponent_join = if filter.opponent_character_id.is_some() {
+    // Handle opponent filters (character and/or connect code)
+    let needs_opponent_join = filter.opponent_character_id.is_some() || filter.opponent_connect_code.is_some();
+    let opponent_join = if needs_opponent_join {
         "JOIN player_stats opp_filter ON p.recording_id = opp_filter.recording_id AND opp_filter.player_index != p.player_index"
     } else {
         ""
@@ -978,7 +1397,13 @@ pub fn get_player_stats_timeseries(
     if let Some(opp_char) = filter.opponent_character_id {
         where_clauses.push(format!("opp_filter.character_id = ?{}", param_idx));
         params_vec.push(Box::new(opp_char));
-        // param_idx += 1; // Not needed, last param
+        param_idx += 1;
+    }
+    
+    if let Some(ref opp_code) = filter.opponent_connect_code {
+        where_clauses.push(format!("opp_filter.connect_code = ?{}", param_idx));
+        params_vec.push(Box::new(opp_code.clone()));
+        // param_idx not incremented since not used after this
     }
     
     let where_clause = where_clauses.join(" AND ");

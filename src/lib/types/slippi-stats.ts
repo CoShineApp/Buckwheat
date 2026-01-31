@@ -47,9 +47,49 @@ export interface PlayerStatsForDB {
 	wallTechCount: number;
 	wallJumpTechCount: number;
 
-	// L-Cancel stats
+	// L-Cancel stats (totals)
 	lCancelSuccessCount: number;
 	lCancelFailCount: number;
+
+	// L-Cancel detailed breakdown: per aerial (nair, fair, bair, uair, dair) x target (shield, whiff, hit) x outcome (success, fail)
+	// Nair
+	lCancelNairShieldSuccess: number;
+	lCancelNairShieldFail: number;
+	lCancelNairWhiffSuccess: number;
+	lCancelNairWhiffFail: number;
+	lCancelNairHitSuccess: number;
+	lCancelNairHitFail: number;
+	// Fair
+	lCancelFairShieldSuccess: number;
+	lCancelFairShieldFail: number;
+	lCancelFairWhiffSuccess: number;
+	lCancelFairWhiffFail: number;
+	lCancelFairHitSuccess: number;
+	lCancelFairHitFail: number;
+	// Bair
+	lCancelBairShieldSuccess: number;
+	lCancelBairShieldFail: number;
+	lCancelBairWhiffSuccess: number;
+	lCancelBairWhiffFail: number;
+	lCancelBairHitSuccess: number;
+	lCancelBairHitFail: number;
+	// Uair
+	lCancelUairShieldSuccess: number;
+	lCancelUairShieldFail: number;
+	lCancelUairWhiffSuccess: number;
+	lCancelUairWhiffFail: number;
+	lCancelUairHitSuccess: number;
+	lCancelUairHitFail: number;
+	// Dair
+	lCancelDairShieldSuccess: number;
+	lCancelDairShieldFail: number;
+	lCancelDairWhiffSuccess: number;
+	lCancelDairWhiffFail: number;
+	lCancelDairHitSuccess: number;
+	lCancelDairHitFail: number;
+
+	// Shield grab (placeholder - set to 0 until implemented)
+	shieldGrabCount: number;
 
 	// Final stock state
 	stocksRemaining: number;

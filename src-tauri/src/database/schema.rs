@@ -5,7 +5,7 @@
 use rusqlite::Connection;
 
 /// Current schema version - bump this to force a recreate
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 
 /// Initialize the database schema
 /// Drops and recreates all tables if version doesn't match
@@ -181,9 +181,49 @@ fn recreate_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             wall_tech_count INTEGER DEFAULT 0,
             wall_jump_tech_count INTEGER DEFAULT 0,
             
-            -- L-Cancel stats
+            -- L-Cancel stats (totals)
             l_cancel_success_count INTEGER DEFAULT 0,
             l_cancel_fail_count INTEGER DEFAULT 0,
+            
+            -- L-Cancel detailed breakdown: per aerial (nair, fair, bair, uair, dair) x target (shield, whiff, hit) x outcome (success, fail)
+            -- Nair L-cancels
+            l_cancel_nair_shield_success INTEGER DEFAULT 0,
+            l_cancel_nair_shield_fail INTEGER DEFAULT 0,
+            l_cancel_nair_whiff_success INTEGER DEFAULT 0,
+            l_cancel_nair_whiff_fail INTEGER DEFAULT 0,
+            l_cancel_nair_hit_success INTEGER DEFAULT 0,
+            l_cancel_nair_hit_fail INTEGER DEFAULT 0,
+            -- Fair L-cancels
+            l_cancel_fair_shield_success INTEGER DEFAULT 0,
+            l_cancel_fair_shield_fail INTEGER DEFAULT 0,
+            l_cancel_fair_whiff_success INTEGER DEFAULT 0,
+            l_cancel_fair_whiff_fail INTEGER DEFAULT 0,
+            l_cancel_fair_hit_success INTEGER DEFAULT 0,
+            l_cancel_fair_hit_fail INTEGER DEFAULT 0,
+            -- Bair L-cancels
+            l_cancel_bair_shield_success INTEGER DEFAULT 0,
+            l_cancel_bair_shield_fail INTEGER DEFAULT 0,
+            l_cancel_bair_whiff_success INTEGER DEFAULT 0,
+            l_cancel_bair_whiff_fail INTEGER DEFAULT 0,
+            l_cancel_bair_hit_success INTEGER DEFAULT 0,
+            l_cancel_bair_hit_fail INTEGER DEFAULT 0,
+            -- Uair L-cancels
+            l_cancel_uair_shield_success INTEGER DEFAULT 0,
+            l_cancel_uair_shield_fail INTEGER DEFAULT 0,
+            l_cancel_uair_whiff_success INTEGER DEFAULT 0,
+            l_cancel_uair_whiff_fail INTEGER DEFAULT 0,
+            l_cancel_uair_hit_success INTEGER DEFAULT 0,
+            l_cancel_uair_hit_fail INTEGER DEFAULT 0,
+            -- Dair L-cancels
+            l_cancel_dair_shield_success INTEGER DEFAULT 0,
+            l_cancel_dair_shield_fail INTEGER DEFAULT 0,
+            l_cancel_dair_whiff_success INTEGER DEFAULT 0,
+            l_cancel_dair_whiff_fail INTEGER DEFAULT 0,
+            l_cancel_dair_hit_success INTEGER DEFAULT 0,
+            l_cancel_dair_hit_fail INTEGER DEFAULT 0,
+            
+            -- Shield grab count (placeholder - set to 0 until implemented)
+            shield_grab_count INTEGER DEFAULT 0,
             
             -- Final game state
             stocks_remaining INTEGER DEFAULT 0,

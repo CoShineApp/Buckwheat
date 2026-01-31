@@ -20,6 +20,10 @@ let recording = $state<ClipSession | RecordingWithMetadata | undefined>(undefine
 let currentTime = $state(0);
 let duration = $state(0);
 
+// Player stats from the database (for L-cancel breakdown display)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let playerStats = $state<any[]>([]);
+
 // Player dimensions for crop overlay positioning
 let playerDimensions = $state<{ width: number; height: number }>({ width: 640, height: 480 });
 
@@ -62,6 +66,7 @@ const hasChanges = $derived.by(() => {
 $effect(() => {
 	if (!recordingId) {
 		recording = undefined;
+		playerStats = [];
 		return;
 	}
 
@@ -79,6 +84,18 @@ $effect(() => {
 		if (!recording) {
 			console.warn('⚠️ Recording not found:', recordingId, 'isClip:', isClip);
 			return;
+		}
+
+		// Fetch player stats for this recording (for L-cancel breakdown)
+		try {
+			const stats = await invoke<unknown[]>('get_player_stats', {
+				recordingId: recordingId
+			});
+			playerStats = stats ?? [];
+			console.log('📊 Loaded player stats:', playerStats);
+		} catch (e) {
+			console.warn('⚠️ Could not load player stats:', e);
+			playerStats = [];
 		}
 	})();
 });
@@ -305,7 +322,7 @@ async function handleCreateClip() {
 		<div class="flex flex-col gap-3 overflow-y-auto">
 			<!-- Match Stats (if available) -->
 			{#if slippiMetadata}
-				<StatsPanel metadata={slippiMetadata} />
+				<StatsPanel metadata={slippiMetadata} {playerStats} />
 			{/if}
 			
 			<!-- Spacer to push editor to bottom -->

@@ -59,6 +59,38 @@
 		};
 	}
 
+	interface AerialLCancelStats {
+		percent: number;
+		success: number;
+		total: number;
+		hitSuccess: number;
+		hitFail: number;
+		shieldSuccess: number;
+		shieldFail: number;
+		whiffSuccess: number;
+		whiffFail: number;
+	}
+
+	interface LCancelAerialBreakdown {
+		nair: AerialLCancelStats;
+		fair: AerialLCancelStats;
+		bair: AerialLCancelStats;
+		uair: AerialLCancelStats;
+		dair: AerialLCancelStats;
+	}
+
+	interface LCancelTargetBreakdown {
+		hitPercent: number;
+		shieldPercent: number;
+		whiffPercent: number;
+		hitSuccess: number;
+		hitTotal: number;
+		shieldSuccess: number;
+		shieldTotal: number;
+		whiffSuccess: number;
+		whiffTotal: number;
+	}
+
 	interface AggregatedStats {
 		totalGames: number;
 		totalWins: number;
@@ -78,6 +110,8 @@
 			games: number;
 			wins: number;
 		}>;
+		lCancelByAerial: LCancelAerialBreakdown;
+		lCancelByTarget: LCancelTargetBreakdown;
 	}
 
 	interface StatsFilter {
@@ -86,6 +120,7 @@
 		stageId?: number;
 		startTime?: string;
 		endTime?: string;
+		opponentConnectCode?: string;
 	}
 
 	interface AvailableFilterOptions {
@@ -111,6 +146,45 @@
 	let playerCharacterFilter = $state<string | undefined>(undefined);
 	let stageFilter = $state<string | undefined>(undefined);
 	let timeRangeFilter = $state<TimeRange>("");
+	let opponentCodeFilter = $state<string>("");
+	
+	// L-Cancel aerial filter (for interactive breakdown)
+	type AerialType = 'nair' | 'fair' | 'bair' | 'uair' | 'dair' | null;
+	let selectedAerial = $state<AerialType>(null);
+	
+	// Computed target breakdown based on selected aerial
+	const filteredTargetBreakdown = $derived.by(() => {
+		if (!stats || !stats.lCancelByTarget) return null;
+		
+		// If an aerial is selected, use its per-target breakdown
+		if (selectedAerial && stats.lCancelByAerial) {
+			const aerial = stats.lCancelByAerial[selectedAerial];
+			if (!aerial) return stats.lCancelByTarget;
+			
+			const hitTotal = (aerial.hitSuccess ?? 0) + (aerial.hitFail ?? 0);
+			const shieldTotal = (aerial.shieldSuccess ?? 0) + (aerial.shieldFail ?? 0);
+			const whiffTotal = (aerial.whiffSuccess ?? 0) + (aerial.whiffFail ?? 0);
+			
+			return {
+				hitPercent: hitTotal > 0 ? ((aerial.hitSuccess ?? 0) / hitTotal) * 100 : 0,
+				shieldPercent: shieldTotal > 0 ? ((aerial.shieldSuccess ?? 0) / shieldTotal) * 100 : 0,
+				whiffPercent: whiffTotal > 0 ? ((aerial.whiffSuccess ?? 0) / whiffTotal) * 100 : 0,
+				hitSuccess: aerial.hitSuccess ?? 0,
+				hitTotal,
+				shieldSuccess: aerial.shieldSuccess ?? 0,
+				shieldTotal,
+				whiffSuccess: aerial.whiffSuccess ?? 0,
+				whiffTotal,
+			};
+		}
+		
+		// Otherwise use the overall target breakdown
+		return stats.lCancelByTarget;
+	});
+	
+	function toggleAerialFilter(aerial: AerialType) {
+		selectedAerial = selectedAerial === aerial ? null : aerial;
+	}
 
 	// Derived: available characters and stages from filter options
 	let availablePlayerCharacters = $derived(
@@ -137,12 +211,14 @@
 	// Build filter object from state
 	let currentFilter = $derived.by<StatsFilter>(() => {
 		const timeFilter = getTimeRangeFilter(timeRangeFilter);
+		const trimmedOpponentCode = opponentCodeFilter.trim().toUpperCase();
 		return {
 			opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
 			playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
 			stageId: stageFilter ? parseInt(stageFilter) : undefined,
 			startTime: timeFilter.startTime,
 			endTime: timeFilter.endTime,
+			opponentConnectCode: trimmedOpponentCode || undefined,
 		};
 	});
 
@@ -151,7 +227,8 @@
 		(opponentCharacterFilter !== undefined && opponentCharacterFilter !== "") ||
 		(playerCharacterFilter !== undefined && playerCharacterFilter !== "") ||
 		(stageFilter !== undefined && stageFilter !== "") ||
-		timeRangeFilter !== ""
+		timeRangeFilter !== "" ||
+		opponentCodeFilter.trim() !== ""
 	);
 
 	// Historical sync state
@@ -364,6 +441,7 @@
 		playerCharacterFilter = undefined;
 		stageFilter = undefined;
 		timeRangeFilter = "";
+		opponentCodeFilter = "";
 	}
 
 	function applyFilters() {
@@ -545,6 +623,17 @@
 							{/each}
 						</Select.Content>
 					</Select.Root>
+				</div>
+
+				<!-- Opponent Code Filter -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">vs Player</span>
+					<input
+						type="text"
+						bind:value={opponentCodeFilter}
+						placeholder="ABC#123"
+						class="h-9 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring uppercase"
+					/>
 				</div>
 
 				<!-- Stage Filter -->
@@ -798,6 +887,79 @@
 				</Card.Root>
 			</button>
 		</div>
+
+		<!-- L-Cancel Breakdown Card -->
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>L-Cancel Breakdown</Card.Title>
+				<p class="text-sm text-muted-foreground">
+					Success rate by aerial type and target situation
+				</p>
+			</Card.Header>
+			<Card.Content class="space-y-6">
+				<!-- By Aerial (clickable to filter) -->
+				<div>
+					<div class="flex items-center justify-between mb-3">
+						<h4 class="text-sm font-medium">By Aerial</h4>
+						{#if selectedAerial}
+							<button 
+								onclick={() => selectedAerial = null}
+								class="text-xs text-muted-foreground hover:text-foreground transition-colors"
+							>
+								Clear filter
+							</button>
+						{:else}
+							<span class="text-xs text-muted-foreground">Click to filter</span>
+						{/if}
+					</div>
+					<div class="grid grid-cols-5 gap-3 text-center">
+						{#each ['nair', 'fair', 'bair', 'uair', 'dair'] as aerial}
+							{@const aerialStats = stats.lCancelByAerial?.[aerial as keyof LCancelAerialBreakdown] as AerialLCancelStats | undefined}
+							{@const isSelected = selectedAerial === aerial}
+							<button 
+								onclick={() => toggleAerialFilter(aerial as AerialType)}
+								class="space-y-1 text-left transition-all {isSelected ? 'scale-105' : 'hover:scale-102'}"
+							>
+								<div class="text-xs font-medium text-muted-foreground uppercase text-center">{aerial}</div>
+								<div class="rounded-lg p-3 transition-all {isSelected ? 'bg-primary/20 ring-2 ring-primary' : 'bg-muted/50 hover:bg-muted/70'}">
+									<div class="text-xl font-bold text-center {isSelected ? 'text-primary' : 'text-foreground'}">{formatDecimal(aerialStats?.percent ?? 0)}%</div>
+									<div class="text-xs text-muted-foreground text-center">{aerialStats?.success ?? 0}/{aerialStats?.total ?? 0}</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- By Target Type (filtered by selected aerial) -->
+				{#if filteredTargetBreakdown}
+					<div>
+						<h4 class="text-sm font-medium mb-3">
+							By Situation
+							{#if selectedAerial}
+								<span class="text-primary font-bold ml-1">({selectedAerial.toUpperCase()})</span>
+							{/if}
+						</h4>
+						<div class="grid grid-cols-3 gap-4 text-center">
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">On Hit</div>
+								<div class="text-2xl font-bold text-green-500">{formatDecimal(filteredTargetBreakdown.hitPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.hitSuccess}/{filteredTargetBreakdown.hitTotal}</div>
+							</div>
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">On Shield</div>
+								<div class="text-2xl font-bold text-yellow-500">{formatDecimal(filteredTargetBreakdown.shieldPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.shieldSuccess}/{filteredTargetBreakdown.shieldTotal}</div>
+							</div>
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">Whiffed</div>
+								<div class="text-2xl font-bold text-blue-500">{formatDecimal(filteredTargetBreakdown.whiffPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.whiffSuccess}/{filteredTargetBreakdown.whiffTotal}</div>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<!-- Character Stats (Opponents Faced) -->
