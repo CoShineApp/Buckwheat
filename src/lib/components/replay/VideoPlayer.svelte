@@ -8,10 +8,12 @@
 		videoPath,
 		oncurrenttimeupdate,
 		ondurationchange,
+		onplayerdimensionschange,
 	}: {
 		videoPath: string;
 		oncurrenttimeupdate?: (time: number) => void;
 		ondurationchange?: (duration: number) => void;
+		onplayerdimensionschange?: (dims: { width: number; height: number }) => void;
 	} = $props();
 
 	// Convert Windows path to proper Tauri asset URL
@@ -26,7 +28,7 @@
 	let videoElement: HTMLVideoElement;
 	let containerElement: HTMLDivElement | null = null;
 	let resizeObserver: ResizeObserver | null = null;
-	let windowResizeHandler: (() => void) | null = null;
+let windowResizeHandler: (() => void) | null = null;
 	let plyrInstance: Plyr | null = null;
 	let currentTime = $state(0);
 	let duration = $state(0);
@@ -54,10 +56,16 @@
 			width = height * aspectRatio;
 		}
 
-		playerDimensions = {
+		const newDims = {
 			width: Math.round(width),
 			height: Math.round(height),
 		};
+		
+		// Only update if dimensions actually changed
+		if (newDims.width !== playerDimensions.width || newDims.height !== playerDimensions.height) {
+			playerDimensions = newDims;
+			onplayerdimensionschange?.(newDims);
+		}
 	}
 
 	onMount(() => {

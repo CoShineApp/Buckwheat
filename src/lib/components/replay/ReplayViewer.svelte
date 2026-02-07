@@ -4,7 +4,6 @@ import { navigation } from '$lib/stores/navigation.svelte';
 import { recordingsStore } from '$lib/stores/recordings.svelte';
 import type { ClipSession } from '$lib/stores/clips.svelte';
 import type { RecordingWithMetadata } from '$lib/types/recording';
-import type { GameEvent } from '$lib/types/recording';
 import VideoPlayer from './VideoPlayer.svelte';
 import Timeline, { type TrimRange } from './Timeline.svelte';
 import StatsPanel from './StatsPanel.svelte';
@@ -18,17 +17,25 @@ let { recordingId, isClip }: { recordingId: string; isClip?: boolean } = $props(
 let playerRef: VideoPlayer;
 let cropOverlayRef: CropOverlay;
 let recording = $state<ClipSession | RecordingWithMetadata | undefined>(undefined);
-let events = $state<GameEvent[]>([]);
 let currentTime = $state(0);
 let duration = $state(0);
-let isLoadingEvents = $state(false);
 
-// Edit mode state
+// Player stats from the database (for L-cancel breakdown display)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let playerStats = $state<any[]>([]);
+
+// Player dimensions for crop overlay positioning
+let playerDimensions = $state<{ width: number; height: number }>({ width: 640, height: 480 });
+
+// Edit mode state - always enabled for clips, toggleable for recordings
 let editMode = $state(false);
 let cropEnabled = $state(false);
 let cropRegion = $state<CropRegion>({ x: 0, y: 0, width: 1, height: 1 });
 let trimRange = $state<TrimRange>({ start: null, end: null });
 let isProcessing = $state(false);
+
+// For clips, always show editor (no "Edit Video" button needed)
+const alwaysShowEditor = $derived(isClip === true);
 
 const isClipOnly = $derived(recordingsStore.isClipOnly(recording));
 const slippiMetadata = $derived(recording?.slippi_metadata ?? null);
@@ -59,7 +66,7 @@ const hasChanges = $derived.by(() => {
 $effect(() => {
 	if (!recordingId) {
 		recording = undefined;
-		events = [];
+		playerStats = [];
 		return;
 	}
 
@@ -76,19 +83,19 @@ $effect(() => {
 
 		if (!recording) {
 			console.warn('⚠️ Recording not found:', recordingId, 'isClip:', isClip);
-			events = [];
 			return;
 		}
 
-		// Load Slippi events if available
-		if (recording.slp_path) {
-			isLoadingEvents = true;
-			events = await recordingsStore.loadSlippiEvents(recording.slp_path);
-			console.log('📊 Loaded', events.length, 'events');
-			isLoadingEvents = false;
-		} else {
-			events = [];
-			isLoadingEvents = false;
+		// Fetch player stats for this recording (for L-cancel breakdown)
+		try {
+			const stats = await invoke<unknown[]>('get_player_stats', {
+				recordingId: recordingId
+			});
+			playerStats = stats ?? [];
+			console.log('📊 Loaded player stats:', playerStats);
+		} catch (e) {
+			console.warn('⚠️ Could not load player stats:', e);
+			playerStats = [];
 		}
 	})();
 });
@@ -201,6 +208,10 @@ function handleCancelEdit() {
 	handleEditModeChange(false);
 }
 
+function handlePlayerDimensionsChange(dims: { width: number; height: number }) {
+	playerDimensions = dims;
+}
+
 async function handleCreateClip() {
 	if (!videoPath || trimRange.start === null || trimRange.end === null) return;
 	
@@ -250,13 +261,6 @@ async function handleCreateClip() {
 				<span class="text-sm text-muted-foreground">Raw video with no replay metadata</span>
 			{/if}
 		</div>
-		<!-- Edit button (when not in edit mode) -->
-		{#if videoPath && !editMode}
-			<EditorControls
-				{editMode}
-				oneditmode={handleEditModeChange}
-			/>
-		{/if}
 	</div>
 
 	<!-- Main content -->
@@ -266,20 +270,29 @@ async function handleCreateClip() {
 			<!-- Video Player Container - fills available space -->
 			<div class="relative flex flex-1 items-center justify-center overflow-hidden bg-black rounded-lg">
 				{#if videoPath}
+					<!-- VideoPlayer fills available space naturally -->
 					<VideoPlayer
 						bind:this={playerRef}
 						videoPath={videoPath}
 						oncurrenttimeupdate={(time) => (currentTime = time)}
 						ondurationchange={(dur) => (duration = dur)}
+						onplayerdimensionschange={handlePlayerDimensionsChange}
 					/>
-					<!-- Crop overlay (positioned over the video) -->
-					<!-- Hide during processing so user can see the video clearly -->
-					<CropOverlay
-						bind:this={cropOverlayRef}
-						enabled={editMode && cropEnabled && !isProcessing}
-						region={cropRegion}
-						onregionchange={handleCropRegionChange}
-					/>
+					<!-- Crop overlay positioned absolutely, centered, matching video dimensions -->
+					<!-- Only render when crop is enabled to avoid blocking video player interactions -->
+					{#if cropEnabled && !isProcessing}
+						<div 
+							class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+							style="width: {playerDimensions.width}px; height: {playerDimensions.height}px;"
+						>
+							<CropOverlay
+								bind:this={cropOverlayRef}
+								enabled={true}
+								region={cropRegion}
+								onregionchange={handleCropRegionChange}
+							/>
+						</div>
+					{/if}
 				{:else}
 					<div
 						class="flex h-full items-center justify-center rounded-lg bg-muted text-muted-foreground"
@@ -293,46 +306,48 @@ async function handleCreateClip() {
 			{#if duration > 0}
 				<div class="flex-shrink-0">
 					<Timeline 
-						{events} 
+						events={[]}
 						{duration} 
 						{currentTime} 
 						onseek={handleSeek}
-						{editMode}
+						editMode={true}
 						{trimRange}
 						ontrimchange={handleTrimChange}
 					/>
 				</div>
-			{:else if isLoadingEvents}
-				<div class="flex-shrink-0 text-center text-sm text-muted-foreground">Loading timeline...</div>
 			{/if}
 		</div>
 
-		<!-- Right side: Stats Panel or Editor Controls -->
-		<div class="overflow-y-auto">
-			{#if editMode}
-				<!-- Editor Controls Panel -->
-				<EditorControls
-					{editMode}
-					{cropEnabled}
-					{cropRegion}
-					{trimRange}
-					{currentTime}
-					{duration}
-					{isProcessing}
-					{hasChanges}
-					oneditmode={handleEditModeChange}
-					oncropenable={handleCropEnableChange}
-					oncropreset={handleCropReset}
-					ontrimstart={handleTrimStart}
-					ontrimend={handleTrimEnd}
-					ontrimclear={handleTrimClear}
-					onapply={handleApplyChanges}
-					oncancel={handleCancelEdit}
-					oncreateclip={handleCreateClip}
-				/>
-			{:else if slippiMetadata}
-				<StatsPanel metadata={slippiMetadata} />
+		<!-- Right side: Stats Panel at top, Editor Controls at bottom -->
+		<div class="flex flex-col gap-3 overflow-y-auto">
+			<!-- Match Stats (if available) -->
+			{#if slippiMetadata}
+				<StatsPanel metadata={slippiMetadata} {playerStats} />
 			{/if}
+			
+			<!-- Spacer to push editor to bottom -->
+			<div class="flex-1"></div>
+			
+			<!-- Video Editor Controls (always visible) -->
+			<EditorControls
+				editMode={true}
+				{cropEnabled}
+				{cropRegion}
+				{trimRange}
+				{currentTime}
+				{duration}
+				{isProcessing}
+				{hasChanges}
+				oneditmode={handleEditModeChange}
+				oncropenable={handleCropEnableChange}
+				oncropreset={handleCropReset}
+				ontrimstart={handleTrimStart}
+				ontrimend={handleTrimEnd}
+				ontrimclear={handleTrimClear}
+				onapply={handleApplyChanges}
+				oncancel={undefined}
+				oncreateclip={handleCreateClip}
+			/>
 		</div>
 	</div>
 </div>

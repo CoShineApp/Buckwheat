@@ -5,9 +5,13 @@ use std::collections::{HashMap, HashSet};
 use sysinfo::System;
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+use windows::Win32::Graphics::Gdi::{
+    CreatePen, CreateSolidBrush, DeleteObject, GetDC, Rectangle, ReleaseDC, SelectObject,
+    SetROP2, PS_SOLID, R2_NOTXORPEN,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetWindow, GetWindowRect, GetWindowTextW,
-    GetWindowThreadProcessId, GW_OWNER,
+    GetWindowThreadProcessId, SetForegroundWindow, GW_OWNER,
 };
 
 /// Context for child window enumeration
@@ -308,5 +312,88 @@ unsafe extern "system" fn enum_child_windows_callback(hwnd: HWND, lparam: LPARAM
     }
     
     BOOL::from(true) // Continue enumeration
+}
+
+/// Context for finding a window by process_id
+struct FindWindowContext {
+    target_pid: u32,
+    found_hwnd: Option<HWND>,
+}
+
+unsafe extern "system" fn find_window_by_pid_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let ctx = &mut *(lparam.0 as *mut FindWindowContext);
+    
+    let mut process_id: u32 = 0;
+    GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+    
+    if process_id == ctx.target_pid {
+        ctx.found_hwnd = Some(hwnd);
+        return BOOL::from(false); // Stop enumeration
+    }
+    
+    BOOL::from(true) // Continue enumeration
+}
+
+/// Highlight a window by bringing it to the foreground and drawing a yellow border
+/// The border is drawn using XOR so it can be erased by drawing again
+pub fn highlight_window(process_id: u32) -> Result<(), String> {
+    unsafe {
+        // Find the window handle by process ID
+        let mut ctx = FindWindowContext {
+            target_pid: process_id,
+            found_hwnd: None,
+        };
+        
+        let _ = EnumWindows(
+            Some(find_window_by_pid_callback),
+            LPARAM(&mut ctx as *mut FindWindowContext as isize),
+        );
+        
+        let hwnd = ctx.found_hwnd.ok_or_else(|| {
+            format!("No window found for process ID {}", process_id)
+        })?;
+        
+        // Bring window to foreground
+        let _ = SetForegroundWindow(hwnd);
+        
+        // Get window rectangle
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return Err("Failed to get window rect".to_string());
+        }
+        
+        // Get screen DC to draw on
+        let hdc = GetDC(None);
+        if hdc.is_invalid() {
+            return Err("Failed to get DC".to_string());
+        }
+        
+        // Create a thick yellow pen (5 pixels)
+        let yellow = 0x00FFFF_u32; // BGR format: Yellow
+        let pen = CreatePen(PS_SOLID, 5, windows::Win32::Foundation::COLORREF(yellow));
+        let brush = CreateSolidBrush(windows::Win32::Foundation::COLORREF(0)); // Hollow brush
+        
+        let old_pen = SelectObject(hdc, pen);
+        let old_brush = SelectObject(hdc, brush);
+        let _old_rop = SetROP2(hdc, R2_NOTXORPEN);
+        
+        // Draw rectangle border
+        let _ = Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
+        
+        // Wait a bit
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        
+        // Erase by drawing again (XOR)
+        let _ = Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
+        
+        // Cleanup
+        SelectObject(hdc, old_brush);
+        SelectObject(hdc, old_pen);
+        let _ = DeleteObject(pen);
+        let _ = DeleteObject(brush);
+        ReleaseDC(None, hdc);
+        
+        Ok(())
+    }
 }
 

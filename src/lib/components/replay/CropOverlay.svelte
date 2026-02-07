@@ -121,13 +121,23 @@
 	}
 
 	// Get pixel-based crop values for a given video resolution
+	// Ensures crop region doesn't exceed video bounds (avoids FFmpeg errors)
 	export function getPixelCrop(videoWidth: number, videoHeight: number) {
-		return {
-			x: Math.round(region.x * videoWidth),
-			y: Math.round(region.y * videoHeight),
-			width: Math.round(region.width * videoWidth),
-			height: Math.round(region.height * videoHeight),
-		};
+		const x = Math.round(region.x * videoWidth);
+		const y = Math.round(region.y * videoHeight);
+		// Clamp width/height to not exceed remaining space
+		let width = Math.round(region.width * videoWidth);
+		let height = Math.round(region.height * videoHeight);
+		
+		// Ensure crop doesn't exceed video dimensions
+		width = Math.min(width, videoWidth - x);
+		height = Math.min(height, videoHeight - y);
+		
+		// Ensure dimensions are positive
+		width = Math.max(1, width);
+		height = Math.max(1, height);
+		
+		return { x, y, width, height };
 	}
 </script>
 

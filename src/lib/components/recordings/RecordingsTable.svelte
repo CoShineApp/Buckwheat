@@ -14,7 +14,7 @@
 	import { formatRelativeTime, formatFileSize } from "$lib/utils/format";
 	import CharacterIcon from "./CharacterIcon.svelte";
 	import StageIcon from "./StageIcon.svelte";
-	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2, ChevronLeft, ChevronRight, BarChart3, Crown } from "@lucide/svelte";
+	import { Play, FolderOpen, Trash2, Upload, RefreshCw, Loader2, ChevronLeft, ChevronRight, BarChart3 } from "@lucide/svelte";
 	import { invoke } from "@tauri-apps/api/core";
 	import { handleTauriError, showSuccess } from "$lib/utils/errors";
 	import { navigation } from "$lib/stores/navigation.svelte";
@@ -191,48 +191,45 @@
 								<!-- Match Info (Characters) -->
 								<TableCell>
 									{#if recording.slippi_metadata}
+										{@const winnerPort = recording.slippi_metadata.winner_port}
+										<!-- Sort players by player_tag (highest alphabetical first for deterministic ordering) -->
+										{@const sortedPlayers = [...recording.slippi_metadata.players].sort((a, b) => {
+											const tagA = a.player_tag || '';
+											const tagB = b.player_tag || '';
+											// Reverse alphabetical order (Z comes before A)
+											return tagB.localeCompare(tagA);
+										})}
 										<div class="flex items-center gap-3">
 											<div class="flex items-center gap-1">
-												{#each recording.slippi_metadata.players as player, idx}
+												{#each sortedPlayers as player, idx}
+													{@const isWinner = winnerPort !== undefined && winnerPort !== null && player.port === winnerPort}
 													<CharacterIcon
 														characterId={player.character_id}
 														colorIndex={player.character_color}
 														size="sm"
+														{isWinner}
 													/>
-													{#if idx === 0 && recording.slippi_metadata.players.length > 1}
+													{#if idx === 0 && sortedPlayers.length > 1}
 														<span class="mx-1 text-sm text-muted-foreground">vs</span>
 													{/if}
 												{/each}
 											</div>
 											<div class="flex flex-col gap-0.5">
-												{#if recording.slippi_metadata.players.length >= 2}
-													{@const winnerPort = recording.slippi_metadata.winner_port}
-													{@const winner = winnerPort !== undefined && winnerPort !== null 
-														? recording.slippi_metadata.players.find(p => p.port === winnerPort)
-														: null}
-													{@const loser = winnerPort !== undefined && winnerPort !== null
-														? recording.slippi_metadata.players.find(p => p.port !== winnerPort)
-														: null}
-													
-												{#if winner && loser}
+												{#if sortedPlayers.length >= 2}
 													<div class="flex items-center gap-1.5 text-sm">
-														<Crown class="size-4 text-yellow-500 fill-yellow-500/30" />
-														<span class="font-semibold text-green-600 dark:text-green-400">{winner.player_tag}</span>
-														<span class="text-xs text-muted-foreground">defeated</span>
-														<span class="font-medium text-muted-foreground">{loser.player_tag}</span>
+														{#each sortedPlayers as player, idx}
+															{@const isWinner = winnerPort !== undefined && winnerPort !== null && player.port === winnerPort}
+															<span class={isWinner ? "font-semibold text-green-600 dark:text-green-400" : "font-medium text-muted-foreground"}>
+																{player.player_tag || "Player"}
+															</span>
+															{#if idx === 0}
+																<span class="text-xs text-muted-foreground">vs</span>
+															{/if}
+														{/each}
 													</div>
-													{:else}
-														<!-- Debug: No winner_port found -->
-														{@const _ = console.log('[RecordingsTable] No winner for', recording.id, 'winner_port:', winnerPort, 'players:', recording.slippi_metadata.players.map(p => ({tag: p.player_tag, port: p.port})))}
-														<span class="text-sm font-medium">
-															{recording.slippi_metadata.players[0]?.player_tag || "Player 1"}
-															vs
-															{recording.slippi_metadata.players[1]?.player_tag || "Player 2"}
-														</span>
-													{/if}
-												{:else if recording.slippi_metadata.players[0]}
+												{:else if sortedPlayers[0]}
 													<span class="text-sm font-medium">
-														{recording.slippi_metadata.players[0].player_tag}
+														{sortedPlayers[0].player_tag}
 													</span>
 												{/if}
 											</div>

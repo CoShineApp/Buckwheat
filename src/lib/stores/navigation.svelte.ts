@@ -111,9 +111,14 @@ class NavigationStore {
 		this._state = { page: "total_stats" };
 	}
 
-	/** Navigate back to the home page */
+	/** Navigate back to the appropriate page (clips if viewing a clip, home otherwise) */
 	navigateBack(): void {
-		this._state = { page: "home" };
+		// If we're viewing a clip, go back to clips list
+		if (this._state.page === "replay" && this._state.replay?.isClip) {
+			this._state = { page: "clips" };
+		} else {
+			this._state = { page: "home" };
+		}
 	}
 }
 

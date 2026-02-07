@@ -21,8 +21,9 @@ use commands::default::{read, write};
 // Library commands
 use commands::library::{
     delete_recording, get_clips, get_player_stats, get_recordings, get_total_player_stats,
-    get_available_filter_options, open_file_location, open_recording_folder, open_video, 
-    refresh_recordings_cache, save_computed_stats, list_slp_files, check_slp_synced,
+    get_available_filter_options, get_player_stats_timeseries, open_file_location, 
+    open_recording_folder, open_video, refresh_recordings_cache, save_computed_stats, 
+    list_slp_files, check_slp_synced,
 };
 // Recording commands
 use commands::recording::{start_generic_recording, start_recording, stop_recording};
@@ -36,8 +37,8 @@ use commands::slippi::{
 };
 // Window commands
 use commands::window::{
-    capture_window_preview, check_game_window, get_game_process_name, list_game_windows,
-    set_game_process_name,
+    capture_window_preview, check_game_window, get_game_process_name, highlight_game_window,
+    list_game_windows, set_game_process_name,
 };
 
 use tauri::Manager;
@@ -49,6 +50,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::default().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Initialize logging first (so we can see database init logs)
             if cfg!(debug_assertions) {
@@ -103,6 +106,7 @@ pub fn run() {
             list_game_windows,
             get_game_process_name,
             set_game_process_name,
+            highlight_game_window,
             get_settings_path,
             open_settings_folder,
             get_setting,
@@ -125,6 +129,7 @@ pub fn run() {
             get_player_stats,
             get_total_player_stats,
             get_available_filter_options,
+            get_player_stats_timeseries,
             // Historical sync commands
             list_slp_files,
             check_slp_synced,

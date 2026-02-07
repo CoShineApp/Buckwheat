@@ -98,3 +98,17 @@ pub async fn set_game_process_name(
     Ok(())
 }
 
+/// Highlight a window by bringing it to foreground and drawing a yellow border
+#[tauri::command]
+pub async fn highlight_game_window(process_id: u32) -> Result<(), Error> {
+    log::info!("Highlighting window with PID: {}", process_id);
+    
+    // Run in a blocking task since it uses thread::sleep
+    tokio::task::spawn_blocking(move || {
+        window_detector::highlight_window(process_id)
+    })
+    .await
+    .map_err(|e| Error::RecordingFailed(format!("Task failed: {}", e)))?
+    .map_err(|e| Error::RecordingFailed(e))
+}
+

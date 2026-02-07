@@ -61,6 +61,153 @@ function sumObjectValues(val: unknown, fallback = 0): number {
 }
 
 /**
+ * L-cancel breakdown structure with all aerials and target types.
+ */
+interface LCancelBreakdown {
+	// Totals
+	successTotal: number;
+	failTotal: number;
+	// Per aerial x target x outcome
+	nairShieldSuccess: number;
+	nairShieldFail: number;
+	nairWhiffSuccess: number;
+	nairWhiffFail: number;
+	nairHitSuccess: number;
+	nairHitFail: number;
+	fairShieldSuccess: number;
+	fairShieldFail: number;
+	fairWhiffSuccess: number;
+	fairWhiffFail: number;
+	fairHitSuccess: number;
+	fairHitFail: number;
+	bairShieldSuccess: number;
+	bairShieldFail: number;
+	bairWhiffSuccess: number;
+	bairWhiffFail: number;
+	bairHitSuccess: number;
+	bairHitFail: number;
+	uairShieldSuccess: number;
+	uairShieldFail: number;
+	uairWhiffSuccess: number;
+	uairWhiffFail: number;
+	uairHitSuccess: number;
+	uairHitFail: number;
+	dairShieldSuccess: number;
+	dairShieldFail: number;
+	dairWhiffSuccess: number;
+	dairWhiffFail: number;
+	dairHitSuccess: number;
+	dairHitFail: number;
+}
+
+/**
+ * Type for the nested lCancel count structure from slippi-js.
+ * Structure: { success: { shield: { bair, nair, ... }, whiff: {...}, hit: {...} }, fail: {...} }
+ */
+type LCancelCountRaw = {
+	success?: {
+		shield?: Record<string, number>;
+		whiff?: Record<string, number>;
+		hit?: Record<string, number>;
+	};
+	fail?: {
+		shield?: Record<string, number>;
+		whiff?: Record<string, number>;
+		hit?: Record<string, number>;
+	};
+};
+
+/**
+ * Extract detailed L-cancel breakdown from slippi-js lCancelCount structure.
+ * Returns counts for each aerial (nair, fair, bair, uair, dair) x target (shield, whiff, hit) x outcome (success, fail).
+ */
+function extractLCancelBreakdown(lCancelCount: unknown): LCancelBreakdown {
+	const empty: LCancelBreakdown = {
+		successTotal: 0,
+		failTotal: 0,
+		nairShieldSuccess: 0, nairShieldFail: 0, nairWhiffSuccess: 0, nairWhiffFail: 0, nairHitSuccess: 0, nairHitFail: 0,
+		fairShieldSuccess: 0, fairShieldFail: 0, fairWhiffSuccess: 0, fairWhiffFail: 0, fairHitSuccess: 0, fairHitFail: 0,
+		bairShieldSuccess: 0, bairShieldFail: 0, bairWhiffSuccess: 0, bairWhiffFail: 0, bairHitSuccess: 0, bairHitFail: 0,
+		uairShieldSuccess: 0, uairShieldFail: 0, uairWhiffSuccess: 0, uairWhiffFail: 0, uairHitSuccess: 0, uairHitFail: 0,
+		dairShieldSuccess: 0, dairShieldFail: 0, dairWhiffSuccess: 0, dairWhiffFail: 0, dairHitSuccess: 0, dairHitFail: 0,
+	};
+
+	if (!lCancelCount || typeof lCancelCount !== "object") {
+		return empty;
+	}
+
+	const lc = lCancelCount as LCancelCountRaw;
+
+	// Helper to safely get a number from the nested structure
+	const getCount = (outcome: "success" | "fail", target: "shield" | "whiff" | "hit", aerial: string): number => {
+		const outcomeObj = lc[outcome];
+		if (!outcomeObj) return 0;
+		const targetObj = outcomeObj[target];
+		if (!targetObj) return 0;
+		const value = targetObj[aerial];
+		return typeof value === "number" ? value : 0;
+	};
+
+	// Extract all values
+	const result: LCancelBreakdown = {
+		successTotal: 0,
+		failTotal: 0,
+		// Nair
+		nairShieldSuccess: getCount("success", "shield", "nair"),
+		nairShieldFail: getCount("fail", "shield", "nair"),
+		nairWhiffSuccess: getCount("success", "whiff", "nair"),
+		nairWhiffFail: getCount("fail", "whiff", "nair"),
+		nairHitSuccess: getCount("success", "hit", "nair"),
+		nairHitFail: getCount("fail", "hit", "nair"),
+		// Fair
+		fairShieldSuccess: getCount("success", "shield", "fair"),
+		fairShieldFail: getCount("fail", "shield", "fair"),
+		fairWhiffSuccess: getCount("success", "whiff", "fair"),
+		fairWhiffFail: getCount("fail", "whiff", "fair"),
+		fairHitSuccess: getCount("success", "hit", "fair"),
+		fairHitFail: getCount("fail", "hit", "fair"),
+		// Bair
+		bairShieldSuccess: getCount("success", "shield", "bair"),
+		bairShieldFail: getCount("fail", "shield", "bair"),
+		bairWhiffSuccess: getCount("success", "whiff", "bair"),
+		bairWhiffFail: getCount("fail", "whiff", "bair"),
+		bairHitSuccess: getCount("success", "hit", "bair"),
+		bairHitFail: getCount("fail", "hit", "bair"),
+		// Uair
+		uairShieldSuccess: getCount("success", "shield", "uair"),
+		uairShieldFail: getCount("fail", "shield", "uair"),
+		uairWhiffSuccess: getCount("success", "whiff", "uair"),
+		uairWhiffFail: getCount("fail", "whiff", "uair"),
+		uairHitSuccess: getCount("success", "hit", "uair"),
+		uairHitFail: getCount("fail", "hit", "uair"),
+		// Dair
+		dairShieldSuccess: getCount("success", "shield", "dair"),
+		dairShieldFail: getCount("fail", "shield", "dair"),
+		dairWhiffSuccess: getCount("success", "whiff", "dair"),
+		dairWhiffFail: getCount("fail", "whiff", "dair"),
+		dairHitSuccess: getCount("success", "hit", "dair"),
+		dairHitFail: getCount("fail", "hit", "dair"),
+	};
+
+	// Calculate totals
+	result.successTotal =
+		result.nairShieldSuccess + result.nairWhiffSuccess + result.nairHitSuccess +
+		result.fairShieldSuccess + result.fairWhiffSuccess + result.fairHitSuccess +
+		result.bairShieldSuccess + result.bairWhiffSuccess + result.bairHitSuccess +
+		result.uairShieldSuccess + result.uairWhiffSuccess + result.uairHitSuccess +
+		result.dairShieldSuccess + result.dairWhiffSuccess + result.dairHitSuccess;
+
+	result.failTotal =
+		result.nairShieldFail + result.nairWhiffFail + result.nairHitFail +
+		result.fairShieldFail + result.fairWhiffFail + result.fairHitFail +
+		result.bairShieldFail + result.bairWhiffFail + result.bairHitFail +
+		result.uairShieldFail + result.uairWhiffFail + result.uairHitFail +
+		result.dairShieldFail + result.dairWhiffFail + result.dairHitFail;
+
+	return result;
+}
+
+/**
  * Parse a .slp file and compute all stats using slippi-js.
  * @param slpPath - Path to the .slp file
  * @returns Computed stats ready for database storage
@@ -140,6 +287,9 @@ export async function parseSlippiStats(
 			const port = player.port ?? playerIndex;
 			console.log(`[SlippiStats] Player ${playerIndex}: port=${port}, connectCode=${connectCode}`);
 
+			// Extract detailed L-cancel breakdown
+			const lCancelBreakdown = extractLCancelBreakdown(actionCounts?.lCancelCount);
+
 			const playerStats: PlayerStatsForDB = {
 				playerIndex,
 				connectCode,
@@ -178,9 +328,44 @@ export async function parseSlippiStats(
 				wallTechCount,
 				wallJumpTechCount: 0, // Not available in slippi-js
 
-				// L-Cancel stats
-				lCancelSuccessCount: actionCounts?.lCancelCount?.success ?? 0,
-				lCancelFailCount: actionCounts?.lCancelCount?.fail ?? 0,
+				// L-Cancel stats (totals)
+				lCancelSuccessCount: lCancelBreakdown.successTotal,
+				lCancelFailCount: lCancelBreakdown.failTotal,
+
+				// L-Cancel detailed breakdown
+				lCancelNairShieldSuccess: lCancelBreakdown.nairShieldSuccess,
+				lCancelNairShieldFail: lCancelBreakdown.nairShieldFail,
+				lCancelNairWhiffSuccess: lCancelBreakdown.nairWhiffSuccess,
+				lCancelNairWhiffFail: lCancelBreakdown.nairWhiffFail,
+				lCancelNairHitSuccess: lCancelBreakdown.nairHitSuccess,
+				lCancelNairHitFail: lCancelBreakdown.nairHitFail,
+				lCancelFairShieldSuccess: lCancelBreakdown.fairShieldSuccess,
+				lCancelFairShieldFail: lCancelBreakdown.fairShieldFail,
+				lCancelFairWhiffSuccess: lCancelBreakdown.fairWhiffSuccess,
+				lCancelFairWhiffFail: lCancelBreakdown.fairWhiffFail,
+				lCancelFairHitSuccess: lCancelBreakdown.fairHitSuccess,
+				lCancelFairHitFail: lCancelBreakdown.fairHitFail,
+				lCancelBairShieldSuccess: lCancelBreakdown.bairShieldSuccess,
+				lCancelBairShieldFail: lCancelBreakdown.bairShieldFail,
+				lCancelBairWhiffSuccess: lCancelBreakdown.bairWhiffSuccess,
+				lCancelBairWhiffFail: lCancelBreakdown.bairWhiffFail,
+				lCancelBairHitSuccess: lCancelBreakdown.bairHitSuccess,
+				lCancelBairHitFail: lCancelBreakdown.bairHitFail,
+				lCancelUairShieldSuccess: lCancelBreakdown.uairShieldSuccess,
+				lCancelUairShieldFail: lCancelBreakdown.uairShieldFail,
+				lCancelUairWhiffSuccess: lCancelBreakdown.uairWhiffSuccess,
+				lCancelUairWhiffFail: lCancelBreakdown.uairWhiffFail,
+				lCancelUairHitSuccess: lCancelBreakdown.uairHitSuccess,
+				lCancelUairHitFail: lCancelBreakdown.uairHitFail,
+				lCancelDairShieldSuccess: lCancelBreakdown.dairShieldSuccess,
+				lCancelDairShieldFail: lCancelBreakdown.dairShieldFail,
+				lCancelDairWhiffSuccess: lCancelBreakdown.dairWhiffSuccess,
+				lCancelDairWhiffFail: lCancelBreakdown.dairWhiffFail,
+				lCancelDairHitSuccess: lCancelBreakdown.dairHitSuccess,
+				lCancelDairHitFail: lCancelBreakdown.dairHitFail,
+
+				// Shield grab (placeholder - set to 0 until implemented)
+				shieldGrabCount: 0,
 
 				// Final state
 				stocksRemaining,

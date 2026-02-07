@@ -1,14 +1,19 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/core";
-	import { Loader2, Swords, Activity, Target, Zap, Shield, Skull, Sword, Filter, X, Clock, RefreshCw, Database } from "@lucide/svelte";
+	import { Loader2, Filter, X, Clock, Database, TrendingUp } from "@lucide/svelte";
 	import { getCharacterName, getStageName } from "$lib/utils/characters";
 	import CharacterIcon from "$lib/components/recordings/CharacterIcon.svelte";
 	import StageIcon from "$lib/components/recordings/StageIcon.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import * as Card from "$lib/components/ui/card";
 	import * as Select from "$lib/components/ui/select";
+	import * as Chart from "$lib/components/ui/chart";
 	import { formatDecimal } from "$lib/utils/format";
 	import { settings } from "$lib/stores/settings.svelte";
+	import { scaleUtc } from "d3-scale";
+	import { Area, AreaChart, ChartClipPath } from "layerchart";
+	import { curveMonotoneX } from "d3-shape";
+	import { cubicInOut } from "svelte/easing";
 
 	// Time range options
 	type TimeRange = "" | "today" | "week" | "month" | "3months" | "year";
@@ -54,6 +59,38 @@
 		};
 	}
 
+	interface AerialLCancelStats {
+		percent: number;
+		success: number;
+		total: number;
+		hitSuccess: number;
+		hitFail: number;
+		shieldSuccess: number;
+		shieldFail: number;
+		whiffSuccess: number;
+		whiffFail: number;
+	}
+
+	interface LCancelAerialBreakdown {
+		nair: AerialLCancelStats;
+		fair: AerialLCancelStats;
+		bair: AerialLCancelStats;
+		uair: AerialLCancelStats;
+		dair: AerialLCancelStats;
+	}
+
+	interface LCancelTargetBreakdown {
+		hitPercent: number;
+		shieldPercent: number;
+		whiffPercent: number;
+		hitSuccess: number;
+		hitTotal: number;
+		shieldSuccess: number;
+		shieldTotal: number;
+		whiffSuccess: number;
+		whiffTotal: number;
+	}
+
 	interface AggregatedStats {
 		totalGames: number;
 		totalWins: number;
@@ -73,6 +110,8 @@
 			games: number;
 			wins: number;
 		}>;
+		lCancelByAerial: LCancelAerialBreakdown;
+		lCancelByTarget: LCancelTargetBreakdown;
 	}
 
 	interface StatsFilter {
@@ -81,6 +120,7 @@
 		stageId?: number;
 		startTime?: string;
 		endTime?: string;
+		opponentConnectCode?: string;
 	}
 
 	interface AvailableFilterOptions {
@@ -106,6 +146,45 @@
 	let playerCharacterFilter = $state<string | undefined>(undefined);
 	let stageFilter = $state<string | undefined>(undefined);
 	let timeRangeFilter = $state<TimeRange>("");
+	let opponentCodeFilter = $state<string>("");
+	
+	// L-Cancel aerial filter (for interactive breakdown)
+	type AerialType = 'nair' | 'fair' | 'bair' | 'uair' | 'dair' | null;
+	let selectedAerial = $state<AerialType>(null);
+	
+	// Computed target breakdown based on selected aerial
+	const filteredTargetBreakdown = $derived.by(() => {
+		if (!stats || !stats.lCancelByTarget) return null;
+		
+		// If an aerial is selected, use its per-target breakdown
+		if (selectedAerial && stats.lCancelByAerial) {
+			const aerial = stats.lCancelByAerial[selectedAerial];
+			if (!aerial) return stats.lCancelByTarget;
+			
+			const hitTotal = (aerial.hitSuccess ?? 0) + (aerial.hitFail ?? 0);
+			const shieldTotal = (aerial.shieldSuccess ?? 0) + (aerial.shieldFail ?? 0);
+			const whiffTotal = (aerial.whiffSuccess ?? 0) + (aerial.whiffFail ?? 0);
+			
+			return {
+				hitPercent: hitTotal > 0 ? ((aerial.hitSuccess ?? 0) / hitTotal) * 100 : 0,
+				shieldPercent: shieldTotal > 0 ? ((aerial.shieldSuccess ?? 0) / shieldTotal) * 100 : 0,
+				whiffPercent: whiffTotal > 0 ? ((aerial.whiffSuccess ?? 0) / whiffTotal) * 100 : 0,
+				hitSuccess: aerial.hitSuccess ?? 0,
+				hitTotal,
+				shieldSuccess: aerial.shieldSuccess ?? 0,
+				shieldTotal,
+				whiffSuccess: aerial.whiffSuccess ?? 0,
+				whiffTotal,
+			};
+		}
+		
+		// Otherwise use the overall target breakdown
+		return stats.lCancelByTarget;
+	});
+	
+	function toggleAerialFilter(aerial: AerialType) {
+		selectedAerial = selectedAerial === aerial ? null : aerial;
+	}
 
 	// Derived: available characters and stages from filter options
 	let availablePlayerCharacters = $derived(
@@ -132,12 +211,14 @@
 	// Build filter object from state
 	let currentFilter = $derived.by<StatsFilter>(() => {
 		const timeFilter = getTimeRangeFilter(timeRangeFilter);
+		const trimmedOpponentCode = opponentCodeFilter.trim().toUpperCase();
 		return {
 			opponentCharacterId: opponentCharacterFilter ? parseInt(opponentCharacterFilter) : undefined,
 			playerCharacterId: playerCharacterFilter ? parseInt(playerCharacterFilter) : undefined,
 			stageId: stageFilter ? parseInt(stageFilter) : undefined,
 			startTime: timeFilter.startTime,
 			endTime: timeFilter.endTime,
+			opponentConnectCode: trimmedOpponentCode || undefined,
 		};
 	});
 
@@ -146,13 +227,141 @@
 		(opponentCharacterFilter !== undefined && opponentCharacterFilter !== "") ||
 		(playerCharacterFilter !== undefined && playerCharacterFilter !== "") ||
 		(stageFilter !== undefined && stageFilter !== "") ||
-		timeRangeFilter !== ""
+		timeRangeFilter !== "" ||
+		opponentCodeFilter.trim() !== ""
 	);
 
 	// Historical sync state
 	let isSyncing = $state(false);
 	let syncProgress = $state({ current: 0, total: 0, skipped: 0 });
 	let syncError = $state<string | null>(null);
+
+	// Chart state
+	type ChartMetric = "lcancel" | "winrate" | "apm" | "openings" | "damage" | "neutral" | "rolls";
+	let selectedChartMetric = $state<ChartMetric>("lcancel");
+	let chartData = $state<Array<{ date: Date; value: number }>>([]);
+	let chartLoading = $state(false);
+
+	// Chart metric configuration - all use the app's primary green color
+	const chartColor = "var(--primary)";
+	const chartMetricConfig: Record<ChartMetric, { label: string; color: string; format: (v: number) => string }> = {
+		lcancel: { label: "L-Cancel %", color: chartColor, format: (v) => `${v.toFixed(1)}%` },
+		winrate: { label: "Win Rate", color: chartColor, format: (v) => `${v.toFixed(0)}%` },
+		apm: { label: "APM", color: chartColor, format: (v) => v.toFixed(0) },
+		openings: { label: "Openings/Kill", color: chartColor, format: (v) => v.toFixed(2) },
+		damage: { label: "Damage/Opening", color: chartColor, format: (v) => `${v.toFixed(1)}%` },
+		neutral: { label: "Neutral Win %", color: chartColor, format: (v) => `${v.toFixed(1)}%` },
+		rolls: { label: "Rolls/Game", color: chartColor, format: (v) => v.toFixed(1) },
+	};
+
+	const currentChartConfig = $derived({
+		value: { label: chartMetricConfig[selectedChartMetric].label, color: chartMetricConfig[selectedChartMetric].color }
+	} satisfies Chart.ChartConfig);
+
+	// Load chart data when metric or slippi code changes
+	$effect(() => {
+		if (slippiCode && stats) {
+			loadChartData();
+		}
+	});
+
+	// Store raw time series data so we can switch metrics without refetching
+	let rawTimeSeriesData = $state<Array<{
+		date: string;
+		l_cancel_percent: number | null;
+		win: boolean;
+		inputs_per_minute: number | null;
+		openings_per_kill: number | null;
+		damage_per_opening: number | null;
+		neutral_win_ratio: number | null;
+		roll_count: number | null;
+	}>>([]);
+
+	// Helper to get date string (YYYY-MM-DD) for grouping by day
+	function getDateKey(dateStr: string): string {
+		const d = new Date(dateStr);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
+	// Helper to extract metric value from a data point
+	function getMetricValue(d: typeof rawTimeSeriesData[0], metric: ChartMetric): number {
+		switch (metric) {
+			case "lcancel":
+				return d.l_cancel_percent ?? 0;
+			case "winrate":
+				return d.win ? 100 : 0;
+			case "apm":
+				return d.inputs_per_minute ?? 0;
+			case "openings":
+				return d.openings_per_kill ?? 0;
+			case "damage":
+				return d.damage_per_opening ?? 0;
+			case "neutral":
+				return (d.neutral_win_ratio ?? 0) * 100;
+			case "rolls":
+				return d.roll_count ?? 0;
+		}
+	}
+
+	// Aggregate data by day and compute average for the selected metric
+	function aggregateByDay(data: typeof rawTimeSeriesData, metric: ChartMetric): Array<{ date: Date; value: number }> {
+		const dayMap = new Map<string, { sum: number; count: number }>();
+		
+		for (const d of data) {
+			const dayKey = getDateKey(d.date);
+			const value = getMetricValue(d, metric);
+			
+			const existing = dayMap.get(dayKey);
+			if (existing) {
+				existing.sum += value;
+				existing.count += 1;
+			} else {
+				dayMap.set(dayKey, { sum: value, count: 1 });
+			}
+		}
+		
+		// Convert to array and sort by date
+		return Array.from(dayMap.entries())
+			.map(([dayKey, { sum, count }]) => ({
+				date: new Date(dayKey),
+				value: sum / count
+			}))
+			.sort((a, b) => a.date.getTime() - b.date.getTime());
+	}
+
+	// Derived chart data that updates when metric changes
+	const chartDataAggregated = $derived(aggregateByDay(rawTimeSeriesData, selectedChartMetric));
+
+	async function loadChartData() {
+		chartLoading = true;
+		try {
+			// Fetch time-series data from backend
+			rawTimeSeriesData = await invoke<typeof rawTimeSeriesData>("get_player_stats_timeseries", {
+				connectCode: slippiCode,
+				filter: hasActiveFilters ? currentFilter : null
+			});
+
+			// chartData is now computed via chartDataAggregated derived
+			chartData = chartDataAggregated;
+		} catch (e) {
+			console.error("Failed to load chart data:", e);
+			rawTimeSeriesData = [];
+			chartData = [];
+		} finally {
+			chartLoading = false;
+		}
+	}
+
+	// Update chartData when metric changes (uses cached raw data)
+	$effect(() => {
+		if (rawTimeSeriesData.length > 0) {
+			chartData = aggregateByDay(rawTimeSeriesData, selectedChartMetric);
+		}
+	});
+
+	function selectChartMetric(metric: ChartMetric) {
+		selectedChartMetric = metric;
+	}
 
 	// Derived sorted stats to avoid mutating state in template
 	let sortedCharacterStats = $derived(
@@ -232,6 +441,7 @@
 		playerCharacterFilter = undefined;
 		stageFilter = undefined;
 		timeRangeFilter = "";
+		opponentCodeFilter = "";
 	}
 
 	function applyFilters() {
@@ -415,6 +625,17 @@
 					</Select.Root>
 				</div>
 
+				<!-- Opponent Code Filter -->
+				<div class="space-y-1.5">
+					<span class="text-xs font-medium text-muted-foreground">vs Player</span>
+					<input
+						type="text"
+						bind:value={opponentCodeFilter}
+						placeholder="ABC#123"
+						class="h-9 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring uppercase"
+					/>
+				</div>
+
 				<!-- Stage Filter -->
 				<div class="space-y-1.5">
 					<span class="text-xs font-medium text-muted-foreground">Stage</span>
@@ -492,87 +713,253 @@
 			<p class="text-muted-foreground">Select a player to view stats</p>
 		</div>
 	{:else if stats}
-		<!-- Overview Cards -->
+		<!-- Performance Chart -->
+		<Card.Root>
+			<Card.Header class="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+				<div class="grid flex-1 gap-1 text-center sm:text-start">
+					<Card.Title class="flex items-center gap-2">
+						<TrendingUp class="size-5" />
+						{chartMetricConfig[selectedChartMetric].label} Over Time
+					</Card.Title>
+					<Card.Description>
+						Click on a stat card below to change what's displayed • {chartData.length} days ({rawTimeSeriesData.length} games)
+					</Card.Description>
+				</div>
+			</Card.Header>
+			<Card.Content class="pt-4">
+				{#if chartLoading}
+					<div class="flex items-center justify-center h-[250px]">
+						<Loader2 class="size-8 animate-spin text-muted-foreground" />
+					</div>
+				{:else if chartData.length === 0}
+					<div class="flex items-center justify-center h-[250px] text-muted-foreground">
+						No data available for chart
+					</div>
+				{:else}
+					<Chart.Container config={currentChartConfig} class="aspect-auto h-[250px] w-full">
+						<AreaChart
+							data={chartData}
+							x="date"
+							xScale={scaleUtc()}
+							series={[
+								{
+									key: "value",
+									label: chartMetricConfig[selectedChartMetric].label,
+									color: chartMetricConfig[selectedChartMetric].color,
+								},
+							]}
+							props={{
+								area: {
+									curve: curveMonotoneX,
+									"fill-opacity": 0.4,
+									line: { class: "stroke-2" },
+									motion: "tween",
+								},
+								xAxis: {
+									format: (v: Date) => v.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+								},
+								yAxis: { 
+									format: (v: number) => chartMetricConfig[selectedChartMetric].format(v)
+								},
+							}}
+						>
+							{#snippet marks({ series, getAreaProps })}
+								<defs>
+									<linearGradient id="fillValue" x1="0" y1="0" x2="0" y2="1">
+										<stop offset="5%" stop-color={chartMetricConfig[selectedChartMetric].color} stop-opacity={0.8} />
+										<stop offset="95%" stop-color={chartMetricConfig[selectedChartMetric].color} stop-opacity={0.1} />
+									</linearGradient>
+								</defs>
+								<ChartClipPath
+									initialWidth={0}
+									motion={{
+										width: { type: "tween", duration: 800, easing: cubicInOut },
+									}}
+								>
+									{#each series as s, i (s.key)}
+										<Area {...getAreaProps(s, i)} fill="url(#fillValue)" />
+									{/each}
+								</ChartClipPath>
+							{/snippet}
+							{#snippet tooltip()}
+								<Chart.Tooltip
+									labelFormatter={(v: Date) => v.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+								/>
+							{/snippet}
+						</AreaChart>
+					</Chart.Container>
+				{/if}
+			</Card.Content>
+		</Card.Root>
+
+		<!-- Overview Cards (clickable to change chart) -->
 		<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Total Games</Card.Title>
-					<Swords class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{stats.totalGames}</div>
-					<p class="text-xs text-muted-foreground">
-						{stats.totalWins} wins ({getWinRate(stats.totalWins, stats.totalGames)})
-					</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- Total Games / Win Rate -->
+			<button onclick={() => selectChartMetric("winrate")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "winrate" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Total Games</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{stats.totalGames}</div>
+						<p class="text-xs text-muted-foreground">
+							{stats.totalWins} wins ({getWinRate(stats.totalWins, stats.totalGames)})
+						</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 			
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Avg L-Cancel</Card.Title>
-					<Activity class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgLCancelPercent)}%</div>
-					<p class="text-xs text-muted-foreground">Success rate</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- L-Cancel -->
+			<button onclick={() => selectChartMetric("lcancel")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "lcancel" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Avg L-Cancel</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgLCancelPercent)}%</div>
+						<p class="text-xs text-muted-foreground">Success rate</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 			
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Neutral Wins</Card.Title>
-					<Target class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgNeutralWins)}%</div>
-					<p class="text-xs text-muted-foreground">Win rate</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- Neutral Wins -->
+			<button onclick={() => selectChartMetric("neutral")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "neutral" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Neutral Wins</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgNeutralWins)}%</div>
+						<p class="text-xs text-muted-foreground">Win rate</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Inputs / Min</Card.Title>
-					<Zap class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgInputsPerMinute, 0)}</div>
-					<p class="text-xs text-muted-foreground">APM</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- APM -->
+			<button onclick={() => selectChartMetric("apm")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "apm" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Inputs / Min</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgInputsPerMinute, 0)}</div>
+						<p class="text-xs text-muted-foreground">APM</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Openings / Kill</Card.Title>
-					<Skull class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgOpeningsPerKill)}</div>
-					<p class="text-xs text-muted-foreground">Lower is better</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- Openings / Kill -->
+			<button onclick={() => selectChartMetric("openings")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "openings" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Openings / Kill</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgOpeningsPerKill)}</div>
+						<p class="text-xs text-muted-foreground">Lower is better</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Damage / Opening</Card.Title>
-					<Sword class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgDamagePerOpening)}%</div>
-					<p class="text-xs text-muted-foreground">Punish game</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- Damage / Opening -->
+			<button onclick={() => selectChartMetric("damage")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "damage" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Damage / Opening</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgDamagePerOpening)}%</div>
+						<p class="text-xs text-muted-foreground">Punish game</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 			
-			<Card.Root>
-				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
-					<Card.Title class="text-sm font-medium">Avg Rolls/Game</Card.Title>
-					<Shield class="size-4 text-muted-foreground" />
-				</Card.Header>
-				<Card.Content>
-					<div class="text-2xl font-bold">{formatDecimal(stats.avgRollsPerGame)}</div>
-					<p class="text-xs text-muted-foreground">Defensive habits</p>
-				</Card.Content>
-			</Card.Root>
+			<!-- Rolls / Game -->
+			<button onclick={() => selectChartMetric("rolls")} class="text-left">
+				<Card.Root class={`transition-all cursor-pointer hover:border-primary/50 ${selectedChartMetric === "rolls" ? "ring-2 ring-primary border-primary" : ""}`}>
+					<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+						<Card.Title class="text-sm font-medium">Avg Rolls/Game</Card.Title>
+					</Card.Header>
+					<Card.Content>
+						<div class="text-2xl font-bold">{formatDecimal(stats.avgRollsPerGame)}</div>
+						<p class="text-xs text-muted-foreground">Defensive habits</p>
+					</Card.Content>
+				</Card.Root>
+			</button>
 		</div>
+
+		<!-- L-Cancel Breakdown Card -->
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>L-Cancel Breakdown</Card.Title>
+				<p class="text-sm text-muted-foreground">
+					Success rate by aerial type and target situation
+				</p>
+			</Card.Header>
+			<Card.Content class="space-y-6">
+				<!-- By Aerial (clickable to filter) -->
+				<div>
+					<div class="flex items-center justify-between mb-3">
+						<h4 class="text-sm font-medium">By Aerial</h4>
+						{#if selectedAerial}
+							<button 
+								onclick={() => selectedAerial = null}
+								class="text-xs text-muted-foreground hover:text-foreground transition-colors"
+							>
+								Clear filter
+							</button>
+						{:else}
+							<span class="text-xs text-muted-foreground">Click to filter</span>
+						{/if}
+					</div>
+					<div class="grid grid-cols-5 gap-3 text-center">
+						{#each ['nair', 'fair', 'bair', 'uair', 'dair'] as aerial}
+							{@const aerialStats = stats.lCancelByAerial?.[aerial as keyof LCancelAerialBreakdown] as AerialLCancelStats | undefined}
+							{@const isSelected = selectedAerial === aerial}
+							<button 
+								onclick={() => toggleAerialFilter(aerial as AerialType)}
+								class="space-y-1 text-left transition-all {isSelected ? 'scale-105' : 'hover:scale-102'}"
+							>
+								<div class="text-xs font-medium text-muted-foreground uppercase text-center">{aerial}</div>
+								<div class="rounded-lg p-3 transition-all {isSelected ? 'bg-primary/20 ring-2 ring-primary' : 'bg-muted/50 hover:bg-muted/70'}">
+									<div class="text-xl font-bold text-center {isSelected ? 'text-primary' : 'text-foreground'}">{formatDecimal(aerialStats?.percent ?? 0)}%</div>
+									<div class="text-xs text-muted-foreground text-center">{aerialStats?.success ?? 0}/{aerialStats?.total ?? 0}</div>
+								</div>
+							</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- By Target Type (filtered by selected aerial) -->
+				{#if filteredTargetBreakdown}
+					<div>
+						<h4 class="text-sm font-medium mb-3">
+							By Situation
+							{#if selectedAerial}
+								<span class="text-primary font-bold ml-1">({selectedAerial.toUpperCase()})</span>
+							{/if}
+						</h4>
+						<div class="grid grid-cols-3 gap-4 text-center">
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">On Hit</div>
+								<div class="text-2xl font-bold text-green-500">{formatDecimal(filteredTargetBreakdown.hitPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.hitSuccess}/{filteredTargetBreakdown.hitTotal}</div>
+							</div>
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">On Shield</div>
+								<div class="text-2xl font-bold text-yellow-500">{formatDecimal(filteredTargetBreakdown.shieldPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.shieldSuccess}/{filteredTargetBreakdown.shieldTotal}</div>
+							</div>
+							<div class="rounded-lg border p-4 transition-all {selectedAerial ? 'border-primary/30' : ''}">
+								<div class="text-xs font-medium text-muted-foreground uppercase mb-2">Whiffed</div>
+								<div class="text-2xl font-bold text-blue-500">{formatDecimal(filteredTargetBreakdown.whiffPercent)}%</div>
+								<div class="text-xs text-muted-foreground mt-1">{filteredTargetBreakdown.whiffSuccess}/{filteredTargetBreakdown.whiffTotal}</div>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</Card.Content>
+		</Card.Root>
 
 		<div class="grid gap-4 md:grid-cols-2">
 			<!-- Character Stats (Opponents Faced) -->

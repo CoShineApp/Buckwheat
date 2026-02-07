@@ -4,7 +4,7 @@
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::database::{self, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions};
+use crate::database::{self, AggregatedPlayerStats, StatsFilter, AvailableFilterOptions, TimeSeriesDataPoint};
 use crate::slippi::{PlayerInfo, RecordingSession, SlippiMetadata};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -192,9 +192,49 @@ pub struct ComputedPlayerStats {
     pub wall_tech_count: i32,
     pub wall_jump_tech_count: i32,
     
-    // L-Cancel stats
+    // L-Cancel stats (totals)
     pub l_cancel_success_count: i32,
     pub l_cancel_fail_count: i32,
+    
+    // L-Cancel detailed breakdown: per aerial x target x outcome
+    // Nair
+    pub l_cancel_nair_shield_success: i32,
+    pub l_cancel_nair_shield_fail: i32,
+    pub l_cancel_nair_whiff_success: i32,
+    pub l_cancel_nair_whiff_fail: i32,
+    pub l_cancel_nair_hit_success: i32,
+    pub l_cancel_nair_hit_fail: i32,
+    // Fair
+    pub l_cancel_fair_shield_success: i32,
+    pub l_cancel_fair_shield_fail: i32,
+    pub l_cancel_fair_whiff_success: i32,
+    pub l_cancel_fair_whiff_fail: i32,
+    pub l_cancel_fair_hit_success: i32,
+    pub l_cancel_fair_hit_fail: i32,
+    // Bair
+    pub l_cancel_bair_shield_success: i32,
+    pub l_cancel_bair_shield_fail: i32,
+    pub l_cancel_bair_whiff_success: i32,
+    pub l_cancel_bair_whiff_fail: i32,
+    pub l_cancel_bair_hit_success: i32,
+    pub l_cancel_bair_hit_fail: i32,
+    // Uair
+    pub l_cancel_uair_shield_success: i32,
+    pub l_cancel_uair_shield_fail: i32,
+    pub l_cancel_uair_whiff_success: i32,
+    pub l_cancel_uair_whiff_fail: i32,
+    pub l_cancel_uair_hit_success: i32,
+    pub l_cancel_uair_hit_fail: i32,
+    // Dair
+    pub l_cancel_dair_shield_success: i32,
+    pub l_cancel_dair_shield_fail: i32,
+    pub l_cancel_dair_whiff_success: i32,
+    pub l_cancel_dair_whiff_fail: i32,
+    pub l_cancel_dair_hit_success: i32,
+    pub l_cancel_dair_hit_fail: i32,
+    
+    // Shield grab (placeholder for now)
+    pub shield_grab_count: i32,
     
     // Final state
     pub stocks_remaining: i32,
@@ -310,6 +350,38 @@ pub async fn save_computed_stats(
             wall_jump_tech_count: player.wall_jump_tech_count,
             l_cancel_success_count: player.l_cancel_success_count,
             l_cancel_fail_count: player.l_cancel_fail_count,
+            // L-Cancel detailed breakdown
+            l_cancel_nair_shield_success: player.l_cancel_nair_shield_success,
+            l_cancel_nair_shield_fail: player.l_cancel_nair_shield_fail,
+            l_cancel_nair_whiff_success: player.l_cancel_nair_whiff_success,
+            l_cancel_nair_whiff_fail: player.l_cancel_nair_whiff_fail,
+            l_cancel_nair_hit_success: player.l_cancel_nair_hit_success,
+            l_cancel_nair_hit_fail: player.l_cancel_nair_hit_fail,
+            l_cancel_fair_shield_success: player.l_cancel_fair_shield_success,
+            l_cancel_fair_shield_fail: player.l_cancel_fair_shield_fail,
+            l_cancel_fair_whiff_success: player.l_cancel_fair_whiff_success,
+            l_cancel_fair_whiff_fail: player.l_cancel_fair_whiff_fail,
+            l_cancel_fair_hit_success: player.l_cancel_fair_hit_success,
+            l_cancel_fair_hit_fail: player.l_cancel_fair_hit_fail,
+            l_cancel_bair_shield_success: player.l_cancel_bair_shield_success,
+            l_cancel_bair_shield_fail: player.l_cancel_bair_shield_fail,
+            l_cancel_bair_whiff_success: player.l_cancel_bair_whiff_success,
+            l_cancel_bair_whiff_fail: player.l_cancel_bair_whiff_fail,
+            l_cancel_bair_hit_success: player.l_cancel_bair_hit_success,
+            l_cancel_bair_hit_fail: player.l_cancel_bair_hit_fail,
+            l_cancel_uair_shield_success: player.l_cancel_uair_shield_success,
+            l_cancel_uair_shield_fail: player.l_cancel_uair_shield_fail,
+            l_cancel_uair_whiff_success: player.l_cancel_uair_whiff_success,
+            l_cancel_uair_whiff_fail: player.l_cancel_uair_whiff_fail,
+            l_cancel_uair_hit_success: player.l_cancel_uair_hit_success,
+            l_cancel_uair_hit_fail: player.l_cancel_uair_hit_fail,
+            l_cancel_dair_shield_success: player.l_cancel_dair_shield_success,
+            l_cancel_dair_shield_fail: player.l_cancel_dair_shield_fail,
+            l_cancel_dair_whiff_success: player.l_cancel_dair_whiff_success,
+            l_cancel_dair_whiff_fail: player.l_cancel_dair_whiff_fail,
+            l_cancel_dair_hit_success: player.l_cancel_dair_hit_success,
+            l_cancel_dair_hit_fail: player.l_cancel_dair_hit_fail,
+            shield_grab_count: player.shield_grab_count,
             stocks_remaining: player.stocks_remaining,
             final_percent: player.final_percent,
             slp_path: Some(stats.slp_path.clone()),
@@ -376,6 +448,26 @@ pub async fn get_available_filter_options(
     
     database::get_available_filter_options(&conn, connect_code.as_deref())
         .map_err(|e| Error::RecordingFailed(format!("Failed to get filter options: {}", e)))
+}
+
+/// Get per-game stats time series for chart visualization
+#[tauri::command]
+pub async fn get_player_stats_timeseries(
+    connect_code: String,
+    filter: Option<StatsFilter>,
+    state: State<'_, AppState>,
+) -> Result<Vec<TimeSeriesDataPoint>, Error> {
+    log::debug!(
+        "Getting time series stats for {} with filter: {:?}", 
+        connect_code, 
+        filter
+    );
+    
+    let db = state.database.clone();
+    let conn = db.connection();
+    
+    database::get_player_stats_timeseries(&conn, &connect_code, filter)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get time series stats: {}", e)))
 }
 
 /// List all .slp files in a directory (recursive, up to 5 levels deep)
