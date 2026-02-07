@@ -96,6 +96,19 @@ export async function captureWindowPreview(): Promise<string | null> {
 }
 
 /**
+ * Highlight a game window by bringing it to front and drawing a yellow border.
+ * The border is temporary and will be removed after ~1.5 seconds.
+ * @param processId - The process ID of the window to highlight
+ */
+export async function highlightGameWindow(processId: number): Promise<void> {
+    try {
+        await invoke('highlight_game_window', { processId });
+    } catch (error) {
+        console.error('Failed to highlight window:', error);
+    }
+}
+
+/**
  * Get the currently configured game process identifier.
  * @returns The stored process identifier, or null if not set
  */

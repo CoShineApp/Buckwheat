@@ -18,7 +18,7 @@ pub use types::GameWindow;
 #[cfg(target_os = "windows")]
 pub use capture::capture_window_preview;
 #[cfg(target_os = "windows")]
-pub use windows::{check_game_window_open, find_game_windows};
+pub use windows::{check_game_window_open, find_game_windows, highlight_window};
 
 // Stubs for non-Windows platforms
 #[cfg(not(target_os = "windows"))]
@@ -34,5 +34,10 @@ pub fn check_game_window_open(_stored_id: Option<&str>) -> bool {
 #[cfg(not(target_os = "windows"))]
 pub fn capture_window_preview(_identifier: &str) -> Result<Vec<u8>, String> {
     Err("Window capture not supported on this platform".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn highlight_window(_process_id: u32) -> Result<(), String> {
+    Err("Window highlighting not supported on this platform".to_string())
 }
 

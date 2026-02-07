@@ -37,8 +37,8 @@ use commands::slippi::{
 };
 // Window commands
 use commands::window::{
-    capture_window_preview, check_game_window, get_game_process_name, list_game_windows,
-    set_game_process_name,
+    capture_window_preview, check_game_window, get_game_process_name, highlight_game_window,
+    list_game_windows, set_game_process_name,
 };
 
 use tauri::Manager;
@@ -106,6 +106,7 @@ pub fn run() {
             list_game_windows,
             get_game_process_name,
             set_game_process_name,
+            highlight_game_window,
             get_settings_path,
             open_settings_folder,
             get_setting,

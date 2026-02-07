@@ -11,7 +11,7 @@
 	import HotkeySelector from "$lib/components/hotkey/HotkeySelector.svelte";
 	import { Folder, Gamepad2, Keyboard, Palette, FolderOpen, Database, Monitor, RefreshCw } from "@lucide/svelte";
 	import { onMount } from "svelte";
-	import { listGameWindows, getGameProcessName, setGameProcessName, captureWindowPreview, type GameWindow } from "$lib/commands";
+	import { listGameWindows, getGameProcessName, setGameProcessName, captureWindowPreview, highlightGameWindow, type GameWindow } from "$lib/commands";
 	import { toast } from "svelte-sonner";
 
 	let settingsPath = $state<string>("");
@@ -20,6 +20,16 @@
 	let isDetecting = $state(false);
 	let previewImage = $state<string | null>(null);
 	let isCapturingPreview = $state(false);
+	let highlightingPid = $state<number | null>(null);
+
+	async function previewWindow(window: GameWindow): Promise<void> {
+		highlightingPid = window.process_id;
+		try {
+			await highlightGameWindow(window.process_id);
+		} finally {
+			highlightingPid = null;
+		}
+	}
 
 	onMount(async () => {
 		try {
@@ -372,35 +382,44 @@
 						<Label>Detected Windows ({detectedWindows.length})</Label>
 						<div class="space-y-2">
 							{#each detectedWindows as window}
-								<button
-									class="flex w-full items-center justify-between rounded-md border p-3 text-left hover:bg-accent transition-colors {window.is_child ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-300 dark:border-blue-700' : ''}"
-									onclick={() => selectGameWindow(window)}
-								>
-									<div class="flex-1 space-y-1">
-										<div class="flex items-center gap-2">
-											<p class="text-sm font-medium">{window.window_title}</p>
-											{#if window.is_child}
-												<span class="rounded bg-blue-500 px-1.5 py-0.5 text-xs font-medium text-white">CHILD</span>
-											{/if}
-											{#if window.has_owner}
-												<span class="rounded bg-purple-500 px-1.5 py-0.5 text-xs font-medium text-white">OWNED</span>
-											{/if}
-										</div>
-										<div class="flex flex-wrap gap-2 text-xs text-muted-foreground">
-											<span>PID: {window.process_id}</span>
-											<span>•</span>
-											<span>{window.width}×{window.height}</span>
-											<span>•</span>
-											<span>Class: {window.class_name}</span>
-											{#if window.is_cloaked}
-												<span class="text-yellow-600">• Cloaked</span>
-											{/if}
-										</div>
+								<div
+								class="flex w-full items-center justify-between rounded-md border p-3 transition-colors {window.is_child ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-300 dark:border-blue-700' : ''} {highlightingPid === window.process_id ? 'ring-2 ring-yellow-400' : ''}"
+							>
+								<div class="flex-1 space-y-1">
+									<div class="flex items-center gap-2">
+										<p class="text-sm font-medium">{window.window_title}</p>
+										{#if window.is_child}
+											<span class="rounded bg-blue-500 px-1.5 py-0.5 text-xs font-medium text-white">CHILD</span>
+										{/if}
+										{#if window.has_owner}
+											<span class="rounded bg-purple-500 px-1.5 py-0.5 text-xs font-medium text-white">OWNED</span>
+										{/if}
 									</div>
-									<Button size="sm" variant="ghost">
+									<div class="flex flex-wrap gap-2 text-xs text-muted-foreground">
+										<span>PID: {window.process_id}</span>
+										<span>•</span>
+										<span>{window.width}×{window.height}</span>
+										<span>•</span>
+										<span>Class: {window.class_name}</span>
+										{#if window.is_cloaked}
+											<span class="text-yellow-600">• Cloaked</span>
+										{/if}
+									</div>
+								</div>
+								<div class="flex items-center gap-2">
+									<Button 
+										size="sm" 
+										variant="outline"
+										onclick={() => previewWindow(window)}
+										disabled={highlightingPid !== null}
+									>
+										{highlightingPid === window.process_id ? "..." : "Preview"}
+									</Button>
+									<Button size="sm" onclick={() => selectGameWindow(window)}>
 										Select
 									</Button>
-								</button>
+								</div>
+							</div>
 							{/each}
 						</div>
 					</div>
