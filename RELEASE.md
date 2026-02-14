@@ -13,27 +13,35 @@ Edit these two files and set `"version": "1.0.2"` (same value in both):
 
 ---
 
-## 2. Build (with signing so the updater works)
+## 2. Build (with signing + real-recording)
 
-Put your Tauri signing key where the script expects it, or set the env vars yourself.
+Release builds **must** use the `real-recording` feature (actual screen capture). Set your signing key, then build.
 
-**Option A – use env vars (recommended)**
+**Option A – release script (easiest)**
+
+Key at default path `C:\Users\cafebabe\peppi-keys\peppi.key`:
+
+```powershell
+.\scripts\release.ps1 -Version "1.0.2"
+```
+
+Custom key path:
+
+```powershell
+.\scripts\release.ps1 -Version "1.0.2" -KeyPath "C:\path\to\peppi.key"
+```
+
+The script bumps version, builds with `--features real-recording`, zips/signs the MSI, and creates `latest.json`.
+
+**Option B – manual build**
 
 ```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "C:\path\to\peppi.key" -Raw
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "your-key-password"
-bun run tauri build
+bun run tauri build -- --features real-recording
 ```
 
-**Option B – use the default key path**
-
-If your key is at `C:\Users\cafebabe\peppi-keys\peppi.key`, you can run:
-
-```powershell
-.\scripts\release.ps1 -Version "1.0.2" -DryRun
-```
-
-Then remove `-DryRun` and run again to actually build. Or just set the two env vars above and run `bun run tauri build` yourself.
+Then do steps 3–5 below (zip, sign, create latest.json) yourself.
 
 ---
 
@@ -140,7 +148,7 @@ If you want a GitHub Release page with installers:
 ## Checklist
 
 - [ ] Version set in `tauri.conf.json` and `package.json`
-- [ ] `bun run tauri build` with `TAURI_SIGNING_PRIVATE_KEY` and password set
+- [ ] Built with `--features real-recording` (script does this; if manual: `bun run tauri build -- --features real-recording`) and signing env vars set
 - [ ] MSI zipped and signed; signature copied from `.sig` file
 - [ ] `latest.json` created with correct version, signature, url, pub_date
 - [ ] Zip uploaded to R2 at `msi/Peppi_X.Y.Z_x64_en-US.msi.zip`

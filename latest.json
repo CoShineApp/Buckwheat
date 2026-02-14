@@ -1,11 +1,1 @@
-{
-    "version": "1.0.2",
-    "notes": "Probably release for sure this time.",
-    "pub_date": "2026-02-14T12:00:00Z",
-    "platforms": {
-      "windows-x86_64": {
-        "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSnUzT0dsRkNoMXRkT25RblJYaDNibXo2eFVxVk9nUk42eENTeUFuL016eU1wTjFSY3U4S1VoRnV3SUNxU0hBZkE4eEplMkZhS1F1d0p6ck1zbUJreDhtTVpzRjd0U3dVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzcxMTA3MTczCWZpbGU6UGVwcGlfMS4wLjJfeDY0X2VuLVVTLm1zaS56aXAKOENJR3FuQnkzbllWdStQMHpCM1BWOGhGb0JPeXh4RDVDb1JSWlRxejFzeHpjektDeUhNUVg2RjYzb3laZWF3YVdtRTUzbTROenluSTJBS3ZjcE91Qnc9PQo=",
-        "url": "https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev/msi/Peppi_1.0.2_x64_en-US.msi.zip"
-      }
-    }
-}
+{"version":"1.0.3","notes":"\\\\","pub_date":"2026-02-14T14:25:17Z","platforms":{"windows-x86_64":{"signature":"dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSnUzT0dsRkNoMXVmdjVUOVJPTmRia0hCM3JNQUNMdFZXZUZYTmp3a3hLYnlrSldpNHdNZVpDS0ZobThLV0tlMFk3TFhBUXdFUSt1c0JDU3hmN2Rvem1TSW0xdDF5VkFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzcxMTA3OTE3CWZpbGU6UGVwcGlfMS4wLjNfeDY0X2VuLVVTLm1zaS56aXAKbCsweGRHdHZyZW1XOTIzVkxyRW9rS2xCcjNNMEVtOWlNbWVMNEd3aDVmQlB1ZENnVHBEcWRjelFwbHR0VWZpODRpR0VIUGRIVkVxQW91Mjc2Uy9aQ3c9PQo=","url":"https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev/msi/Peppi_1.0.3_x64_en-US.msi.zip"}}}

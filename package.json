@@ -1,7 +1,7 @@
 {
 	"name": "peppi",
 	"private": true,
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Headless recording for SSBM through Slippi/Dolphin plus cloud storage",
 	"author": {
 		"name": "hatsupatsu",

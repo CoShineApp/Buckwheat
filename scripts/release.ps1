@@ -25,9 +25,9 @@ $PackageJson = Join-Path $ProjectRoot "package.json"
 $LatestJson = Join-Path $ProjectRoot "latest.json"
 
 Write-Host ""
-Write-Host "╔════════════════════════════════════╗" -ForegroundColor Magenta
-Write-Host "║       PEPPI RELEASE BUILDER        ║" -ForegroundColor Magenta
-Write-Host "╚════════════════════════════════════╝" -ForegroundColor Magenta
+Write-Host "========================================" -ForegroundColor Magenta
+Write-Host "       PEPPI RELEASE BUILDER           " -ForegroundColor Magenta
+Write-Host "========================================" -ForegroundColor Magenta
 
 # Get current version
 $currentTauriConf = Get-Content $TauriConf | ConvertFrom-Json
@@ -104,8 +104,8 @@ if (-not $SkipBuild) {
     if (-not $DryRun) {
         Push-Location $ProjectRoot
         try {
-            # Run the build
-            bun run tauri build
+            # Run the build (real-recording = actual screen capture)
+            bun run tauri build -- --features real-recording
             if ($LASTEXITCODE -ne 0) {
                 Write-Error "Build failed!"
                 exit 1
@@ -215,9 +215,9 @@ Write-Success "latest.json updated"
 # SUMMARY
 # ============================================================================
 Write-Host ""
-Write-Host "╔════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║         RELEASE COMPLETE!          ║" -ForegroundColor Green
-Write-Host "╚════════════════════════════════════╝" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "         RELEASE COMPLETE!              " -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "Version: $Version" -ForegroundColor White
