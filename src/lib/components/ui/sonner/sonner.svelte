@@ -7,6 +7,7 @@
 
 <Sonner
 	theme={mode.current}
+	position="bottom-center"
 	class="toaster group"
 	toastOptions={{
 		classes: {

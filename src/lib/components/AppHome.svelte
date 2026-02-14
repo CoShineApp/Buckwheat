@@ -15,10 +15,6 @@ onMount(() => {
 <div class="flex h-full flex-col gap-6 p-6">
 	<!-- Cloud Storage Usage -->
 	<StorageUsageBar />
-
-	<!-- Stats Dashboard -->
-	<RecordingStats />
-
 	<!-- Recordings Table -->
 	<RecordingsTable />
 

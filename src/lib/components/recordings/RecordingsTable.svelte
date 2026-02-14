@@ -126,7 +126,8 @@
 				<CardTitle>Recordings</CardTitle>
 				<CardDescription>
 					{#if recordingsStore.totalRecordings > 0}
-						Showing {((recordingsStore.currentPage - 1) * recordingsStore.perPage) + 1}–{Math.min(recordingsStore.currentPage * recordingsStore.perPage, recordingsStore.totalRecordings)} of {recordingsStore.totalRecordings} recordings
+						<span>Showing {((recordingsStore.currentPage - 1) * recordingsStore.perPage) + 1}–{Math.min(recordingsStore.currentPage * recordingsStore.perPage, recordingsStore.totalRecordings)} of {recordingsStore.totalRecordings} recordings</span>
+						<span class="block mt-1 text-muted-foreground/90">Select rows to delete in bulk, or use Select all on this page.</span>
 					{:else}
 						No recordings
 					{/if}
@@ -158,16 +159,26 @@
 			</div>
 		{:else}
 			<!-- Table -->
-			<div class="rounded-md border">
+			<div class="rounded-lg border border-border/60 overflow-hidden">
 				<Table>
 					<TableHeader>
 						<TableRow>
 							<TableHead class="w-12">
-								<Checkbox
-									checked={recordingsStore.allSelected}
-									indeterminate={recordingsStore.someSelected}
-									onchange={handleSelectAll}
-								/>
+								<button
+									type="button"
+									class="flex cursor-pointer items-center justify-center rounded p-0.5 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+									onclick={(e) => {
+										e.preventDefault();
+										handleSelectAll();
+									}}
+									title={recordingsStore.allSelected ? "Deselect all" : "Select all on this page"}
+								>
+									<Checkbox
+										class="size-5 pointer-events-none"
+										checked={recordingsStore.allSelected}
+										indeterminate={recordingsStore.someSelected}
+									/>
+								</button>
 							</TableHead>
 							<TableHead>Match</TableHead>
 							<TableHead>Stage</TableHead>
@@ -182,10 +193,17 @@
 							<TableRow>
 								<!-- Checkbox -->
 								<TableCell>
-									<Checkbox
-										checked={recordingsStore.selectedIds.has(recording.id)}
-										onchange={() => recordingsStore.toggleSelection(recording.id)}
-									/>
+									<!-- have to wrap in a button since the checkbox does emit onChange -->
+									<button
+										type="button"
+										class="flex cursor-pointer items-center justify-center rounded p-0.5 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+										onclick={() => recordingsStore.toggleSelection(recording.id)}
+									>
+										<Checkbox
+											class="size-5 pointer-events-none"
+											checked={recordingsStore.selectedIds.has(recording.id)}
+										/>
+									</button>
 								</TableCell>
 
 								<!-- Match Info (Characters) -->
@@ -219,7 +237,7 @@
 													<div class="flex items-center gap-1.5 text-sm">
 														{#each sortedPlayers as player, idx}
 															{@const isWinner = winnerPort !== undefined && winnerPort !== null && player.port === winnerPort}
-															<span class={isWinner ? "font-semibold text-green-600 dark:text-green-400" : "font-medium text-muted-foreground"}>
+															<span class={isWinner ? "font-semibold text-emerald-500 dark:text-emerald-400" : "font-medium text-muted-foreground"}>
 																{player.player_tag || "Player"}
 															</span>
 															{#if idx === 0}
@@ -328,7 +346,7 @@
 
 			<!-- Pagination Controls -->
 			{#if recordingsStore.totalPages > 1}
-				<div class="mt-4 flex items-center justify-between px-2">
+				<div class="mt-4 flex items-center justify-between rounded-lg bg-muted/30 px-4 py-3">
 					<div class="text-sm text-muted-foreground">
 						Page {recordingsStore.currentPage} of {recordingsStore.totalPages}
 					</div>

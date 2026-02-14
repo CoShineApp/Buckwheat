@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Button } from "$lib/components/ui/button";
 	import { recordingsStore } from "$lib/stores/recordings.svelte";
-	import { Trash2, Upload, FolderOpen, X } from "@lucide/svelte";
+	import { Trash2, FolderOpen, X } from "@lucide/svelte";
 	import { invoke } from "@tauri-apps/api/core";
 	import { handleTauriError, showSuccess } from "$lib/utils/errors";
 
-	const selectedCount = $derived(recordingsStore.selectedCount);
+	// Derive directly from selectedIds so Svelte tracks the reactive state
+	const selectedCount = $derived(recordingsStore.selectedIds.size);
 
 	async function handleBulkDelete() {
 		if (!confirm(`Are you sure you want to delete ${selectedCount} recording(s)?`)) return;
@@ -16,11 +17,6 @@
 		} catch (e) {
 			handleTauriError(e, "Failed to delete recordings");
 		}
-	}
-
-	function handleBulkUpload() {
-		console.log("☁️ Uploading", selectedCount, "recordings");
-		showSuccess(`Upload to cloud (coming soon) - ${selectedCount} selected`);
 	}
 
 	async function handleOpenFolder() {
@@ -44,7 +40,7 @@
 	}
 </script>
 
-{#if selectedCount > 0}
+{#if selectedCount > 1}
 	<div class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 transform">
 		<div
 			class="flex items-center gap-3 rounded-lg border bg-background px-6 py-3 shadow-lg"
@@ -59,11 +55,6 @@
 				<Button variant="outline" size="sm" onclick={handleOpenFolder}>
 					<FolderOpen class="size-4" />
 					Open Folder
-				</Button>
-
-				<Button variant="outline" size="sm" onclick={handleBulkUpload}>
-					<Upload class="size-4" />
-					Upload
 				</Button>
 
 				<Button variant="destructive" size="sm" onclick={handleBulkDelete}>
