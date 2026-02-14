@@ -112,6 +112,32 @@ pub async fn delete_recording(
     Ok(())
 }
 
+/// Storage usage information
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageUsage {
+    pub total_bytes: i64,
+    pub recording_count: i32,
+}
+
+/// Get current storage usage for recordings (excluding clips)
+#[tauri::command]
+pub async fn get_storage_usage(state: State<'_, AppState>) -> Result<StorageUsage, Error> {
+    let db = state.database.clone();
+    let conn = db.connection();
+    
+    let total_bytes = database::get_total_storage_bytes(&conn)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get storage bytes: {}", e)))?;
+    
+    let recording_count = database::get_recording_count(&conn)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get recording count: {}", e)))?;
+    
+    Ok(StorageUsage {
+        total_bytes,
+        recording_count,
+    })
+}
+
 /// Manually trigger a cache refresh
 #[tauri::command]
 pub async fn refresh_recordings_cache(app: tauri::AppHandle) -> Result<(), Error> {

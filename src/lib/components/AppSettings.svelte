@@ -21,6 +21,31 @@
 	let previewImage = $state<string | null>(null);
 	let isCapturingPreview = $state(false);
 	let highlightingPid = $state<number | null>(null);
+	let storageUsage = $state<{ totalBytes: number; recordingCount: number } | null>(null);
+
+	async function loadStorageUsage(): Promise<void> {
+		try {
+			storageUsage = await invoke<{ totalBytes: number; recordingCount: number }>("get_storage_usage");
+		} catch (error) {
+			console.error("Failed to load storage usage:", error);
+		}
+	}
+
+	// Helper to format bytes to human readable
+	function formatBytes(bytes: number): string {
+		if (bytes === 0) return "0 B";
+		const k = 1024;
+		const sizes = ["B", "KB", "MB", "GB", "TB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+	}
+
+	// Calculate storage usage percentage
+	const storagePercentage = $derived.by(() => {
+		if (!storageUsage || settings.storageLimit === 0) return 0;
+		const limitBytes = settings.storageLimit * 1024 * 1024 * 1024;
+		return Math.min(100, (storageUsage.totalBytes / limitBytes) * 100);
+	});
 
 	async function previewWindow(window: GameWindow): Promise<void> {
 		highlightingPid = window.process_id;
@@ -35,6 +60,7 @@
 		try {
 			settingsPath = await invoke<string>("get_settings_path");
 			currentProcessName = await getGameProcessName();
+			await loadStorageUsage();
 		} catch (error) {
 			console.error("Failed to get settings path:", error);
 		}
@@ -244,6 +270,58 @@
 						checked={settings.autoStartRecording}
 						onCheckedChange={(checked) => settings.set("autoStartRecording", checked)}
 					/>
+				</div>
+
+				<Separator />
+
+				<!-- Storage Limit Section -->
+				<div class="space-y-4">
+					<div class="space-y-2">
+						<Label for="storage-limit">Storage Limit (GB)</Label>
+						<div class="flex items-center gap-4">
+							<input
+								id="storage-limit"
+								type="number"
+								min="0"
+								step="1"
+								class="flex h-9 w-24 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+								value={settings.storageLimit}
+								oninput={(e) => {
+									const value = parseInt(e.currentTarget.value) || 0;
+									settings.set("storageLimit", Math.max(0, value));
+								}}
+							/>
+							<span class="text-sm text-muted-foreground">
+								{settings.storageLimit === 0 ? "Unlimited" : `${settings.storageLimit} GB`}
+							</span>
+						</div>
+						<p class="text-xs text-muted-foreground">
+							Set to 0 for unlimited storage. When a limit is set, oldest recordings are automatically deleted.
+						</p>
+					</div>
+
+					{#if storageUsage}
+						<div class="space-y-2">
+							<div class="flex items-center justify-between text-sm">
+								<span class="text-muted-foreground">Current Usage</span>
+								<span class="font-medium">
+									{formatBytes(storageUsage.totalBytes)}
+									{#if settings.storageLimit > 0}
+										/ {settings.storageLimit} GB
+									{/if}
+									<span class="text-muted-foreground ml-1">({storageUsage.recordingCount} recordings)</span>
+								</span>
+							</div>
+							{#if settings.storageLimit > 0}
+								<div class="h-2 w-full rounded-full bg-muted overflow-hidden">
+									<div 
+										class="h-full rounded-full transition-all duration-300 {storagePercentage > 90 ? 'bg-destructive' : storagePercentage > 70 ? 'bg-yellow-500' : 'bg-primary'}"
+										style="width: {storagePercentage}%"
+									></div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			</CardContent>
 		</Card>

@@ -44,6 +44,9 @@ export type Settings = {
 
 	/** User's Slippi connect code (e.g., "HATS#982") */
 	slippiCode: string;
+
+	/** Maximum storage limit for recordings in GB (0 = unlimited) */
+	storageLimit: number;
 };
 
 /** Default settings values */
@@ -56,6 +59,7 @@ const DEFAULT_SETTINGS: Settings = {
 	createClipHotkey: "F9",
 	clipDuration: 30,
 	slippiCode: "",
+	storageLimit: 0,
 };
 
 /**
@@ -83,6 +87,8 @@ class SettingsStore {
 	clipDuration = $state(30);
 	/** User's Slippi connect code */
 	slippiCode = $state("");
+	/** Maximum storage limit for recordings in GB (0 = unlimited) */
+	storageLimit = $state(0);
 
 	/** Whether settings are currently loading */
 	isLoading = $state(true);
@@ -122,6 +128,7 @@ class SettingsStore {
 		this.createClipHotkey = settings.createClipHotkey;
 		this.clipDuration = settings.clipDuration;
 		this.slippiCode = settings.slippiCode;
+		this.storageLimit = settings.storageLimit;
 	}
 
 	/** Reset reactive state to default values */
@@ -134,6 +141,7 @@ class SettingsStore {
 		this.createClipHotkey = DEFAULT_SETTINGS.createClipHotkey;
 		this.clipDuration = DEFAULT_SETTINGS.clipDuration;
 		this.slippiCode = DEFAULT_SETTINGS.slippiCode;
+		this.storageLimit = DEFAULT_SETTINGS.storageLimit;
 	}
 
 	/** Get all settings from persistent store */
@@ -149,6 +157,7 @@ class SettingsStore {
 			createClipHotkey: ((await this.store.get("createClipHotkey")) as string) ?? DEFAULT_SETTINGS.createClipHotkey,
 			clipDuration: ((await this.store.get("clipDuration")) as number) ?? DEFAULT_SETTINGS.clipDuration,
 			slippiCode: ((await this.store.get("slippiCode")) as string) ?? DEFAULT_SETTINGS.slippiCode,
+			storageLimit: ((await this.store.get("storageLimit")) as number) ?? DEFAULT_SETTINGS.storageLimit,
 		};
 	}
 
@@ -185,6 +194,9 @@ class SettingsStore {
 			case "slippiCode":
 				this.slippiCode = value as string;
 				break;
+			case "storageLimit":
+				this.storageLimit = value as number;
+				break;
 		}
 		
 		// Persist to store if available
@@ -210,6 +222,7 @@ class SettingsStore {
 			"createClipHotkey",
 			"clipDuration",
 			"slippiCode",
+			"storageLimit",
 		];
 
 		for (const key of keys) {

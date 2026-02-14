@@ -33,6 +33,12 @@ pub mod clips {
     pub const CREATED: &str = "clips-created";
 }
 
+/// Events emitted during storage management
+pub mod storage {
+    /// Emitted when recordings are deleted due to storage limit enforcement
+    pub const CLEANUP: &str = "storage-cleanup";
+}
+
 /// Represents the current state of a Slippi game session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameState {

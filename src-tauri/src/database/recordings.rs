@@ -1456,3 +1456,54 @@ pub fn get_player_stats_timeseries(
     
     Ok(results)
 }
+
+// ============================================================================
+// STORAGE MANAGEMENT QUERIES
+// ============================================================================
+
+/// Get total storage used by recordings (excluding clips)
+/// Returns the sum of file_size in bytes for all recordings where video_path does not contain "Clips"
+pub fn get_total_storage_bytes(conn: &Connection) -> Result<i64, rusqlite::Error> {
+    conn.query_row(
+        "SELECT COALESCE(SUM(file_size), 0) FROM recordings WHERE video_path NOT LIKE '%Clips%'",
+        [],
+        |row| row.get(0),
+    )
+}
+
+/// Get count of recordings (excluding clips)
+pub fn get_recording_count(conn: &Connection) -> Result<i32, rusqlite::Error> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM recordings WHERE video_path NOT LIKE '%Clips%'",
+        [],
+        |row| row.get(0),
+    )
+}
+
+/// Get oldest recordings ordered by start_time (excluding clips)
+/// Used for storage cleanup - returns recordings that should be deleted first
+pub fn get_oldest_recordings(conn: &Connection, limit: i32) -> Result<Vec<RecordingRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT id, video_path, slp_path, file_size, file_modified_at, thumbnail_path, start_time, cached_at, needs_reparse 
+         FROM recordings 
+         WHERE video_path NOT LIKE '%Clips%'
+         ORDER BY start_time ASC 
+         LIMIT ?"
+    )?;
+    
+    let recordings = stmt.query_map([limit], |row| {
+        Ok(RecordingRow {
+            id: row.get(0)?,
+            video_path: row.get(1)?,
+            slp_path: row.get(2)?,
+            file_size: row.get(3)?,
+            file_modified_at: row.get(4)?,
+            thumbnail_path: row.get(5)?,
+            start_time: row.get(6)?,
+            cached_at: row.get(7)?,
+            needs_reparse: row.get(8)?,
+        })
+    })?.collect::<Result<Vec<_>, _>>()?;
+    
+    Ok(recordings)
+}

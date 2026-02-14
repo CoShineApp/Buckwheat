@@ -23,10 +23,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { RecordingSession, RecordingWithMetadata, GameEvent, PaginatedRecordings } from "$lib/types/recording";
-import { handleTauriError, showSuccess } from "$lib/utils/errors";
+import { handleTauriError, showSuccess, showWarning } from "$lib/utils/errors";
 import { recording } from "$lib/stores/recording.svelte";
 import { settings } from "$lib/stores/settings.svelte";
 import { clipsStore, type ClipSession } from "$lib/stores/clips.svelte";
+
+/** Payload for storage-cleanup event */
+interface StorageCleanupPayload {
+	deletedPaths: string[];
+	bytesFreed: number;
+}
 
 /**
  * Manages the recordings list, selection state, and recording controls.
@@ -420,6 +426,21 @@ class RecordingsStore {
 				// (for auto recordings, recording-started will set the video path)
 				if (!recording.isRecording || !recording.currentReplayPath?.endsWith('.mp4')) {
 					recording.setReplayPath(event.payload);
+				}
+			})
+		);
+
+		// Listen for storage cleanup events
+		this.eventListenerPromises.push(
+			listen<StorageCleanupPayload>("storage-cleanup", async (event) => {
+				const { deletedPaths, bytesFreed } = event.payload;
+				console.log(`[Storage] Cleanup event received: deleted ${deletedPaths.length} recordings, freed ${bytesFreed} bytes`);
+				
+				if (deletedPaths.length > 0) {
+					const mbFreed = (bytesFreed / (1024 * 1024)).toFixed(1);
+					showWarning(`Storage limit reached: deleted ${deletedPaths.length} old recording${deletedPaths.length > 1 ? 's' : ''} (freed ${mbFreed} MB)`);
+					// Refresh the recordings list to reflect the deleted items
+					await this.refresh();
 				}
 			})
 		);

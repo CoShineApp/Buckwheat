@@ -119,3 +119,13 @@ export function showInfo(message: string): void {
 	});
 }
 
+/**
+ * Show a warning toast notification.
+ * @param message - Warning message to display
+ */
+export function showWarning(message: string): void {
+	toast.warning(message, {
+		duration: 5000
+	});
+}
+

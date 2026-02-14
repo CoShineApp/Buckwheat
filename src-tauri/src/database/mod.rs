@@ -17,6 +17,8 @@ pub use recordings::{
     get_player_stats_timeseries,
     // Filter options
     get_available_filter_options,
+    // Storage management
+    get_total_storage_bytes, get_recording_count, get_oldest_recordings,
     // Types
     RecordingRow, GameStatsRow, RecordingWithStats, PlayerStatsRow,
     AggregatedPlayerStats, StatsFilter, AvailableFilterOptions, TimeSeriesDataPoint,

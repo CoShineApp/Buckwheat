@@ -260,6 +260,27 @@ async fn stop_recording_internal(app: &tauri::AppHandle) -> Result<(), Error> {
             log::info!("[SlippiStats] Event emitted successfully");
         }
         
+        // Enforce storage limit in background
+        let app_clone = app.clone();
+        tokio::spawn(async move {
+            match library::enforce_storage_limit(&app_clone).await {
+                Ok(result) => {
+                    if !result.deleted_paths.is_empty() {
+                        log::info!(
+                            "[Storage] Cleanup: deleted {} recordings, freed {} bytes",
+                            result.deleted_paths.len(),
+                            result.bytes_freed
+                        );
+                        // Emit storage cleanup event to frontend
+                        if let Err(e) = app_clone.emit(crate::events::storage::CLEANUP, &result) {
+                            log::error!("Failed to emit storage-cleanup event: {:?}", e);
+                        }
+                    }
+                }
+                Err(e) => log::error!("[Storage] Failed to enforce storage limit: {:?}", e),
+            }
+        });
+        
         Ok(())
     } else {
         Err(Error::RecordingFailed("No active recording".to_string()))
