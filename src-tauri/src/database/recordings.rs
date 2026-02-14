@@ -1057,8 +1057,10 @@ pub fn get_aggregated_player_stats(
 
     // 2. Character stats (opponents faced) - with filters applied
     // Winner determined by matching connect code to winning player's ID
-    // Note: This query already has 'opp' joined, so replace opp_filter reference with opp
-    let character_where = where_clause.replace("opp_filter.character_id", "opp.character_id");
+    // Note: This query uses 'opp' as the join alias, so replace opp_filter with opp
+    let character_where = where_clause
+        .replace("opp_filter.character_id", "opp.character_id")
+        .replace("opp_filter.connect_code", "opp.connect_code");
     let character_query = format!(
         "SELECT 
             opp.character_id,

@@ -233,12 +233,12 @@
 			<SidebarMenu>
 				<SidebarMenuItem>
 					<SidebarMenuButton size="lg">
-						<div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+						<div class="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-md shadow-emerald-500/20">
 							<Home class="size-4" />
 						</div>
 						<div class="grid flex-1 text-left text-sm leading-tight">
 							<span class="truncate font-semibold">Peppi</span>
-							<span class="truncate text-xs">Slippi Recorder</span>
+							<span class="truncate text-xs text-muted-foreground">Slippi Recorder</span>
 						</div>
 					</SidebarMenuButton>
 				</SidebarMenuItem>
@@ -333,7 +333,7 @@
 		</SidebarFooter>
 	</Sidebar>
 	<SidebarInset class="flex flex-col bg-background">
-		<header class="flex h-16 shrink-0 items-center gap-2 border-b bg-sidebar px-4">
+		<header class="flex h-16 shrink-0 items-center gap-2 border-b border-border/60 bg-sidebar px-4">
 			<SidebarTrigger class="-ml-1" />
 			<div class="h-4 w-px bg-sidebar-border"></div>
 			<div class="flex flex-1 items-center justify-between gap-2">
