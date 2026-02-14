@@ -44,6 +44,8 @@ pub struct GameStatsRow {
     pub created_at: Option<String>,
     /// Path to .slp file - used for deduplication of historical games
     pub slp_path: Option<String>,
+    /// User-editable notes about the game
+    pub notes: Option<String>,
 }
 
 /// Combined recording with its stats (for paginated queries)
@@ -187,7 +189,7 @@ pub fn get_recordings_paginated(
                 g.player1_id, g.player2_id, g.player1_port, g.player2_port,
                 g.player1_character, g.player2_character, g.player1_color, g.player2_color,
                 g.winner_port, g.loser_port, g.stage, g.game_duration, g.total_frames,
-                g.is_pal, g.played_on, g.created_at, g.slp_path
+                g.is_pal, g.played_on, g.created_at, g.slp_path, g.notes
          FROM recordings r
          LEFT JOIN game_stats g ON r.id = g.id
          WHERE r.video_path NOT LIKE '%Clips%'
@@ -230,6 +232,7 @@ pub fn get_recordings_paginated(
                 played_on: row.get(23)?,
                 created_at: row.get(24)?,
                 slp_path: row.get(25)?,
+                notes: row.get(26)?,
             })
         } else {
             None
@@ -440,14 +443,14 @@ pub fn get_cached_video_paths(conn: &Connection) -> rusqlite::Result<Vec<String>
 // GAME STATS OPERATIONS
 // ============================================================================
 
-/// Insert or update game stats
+/// Insert or update game stats (notes are preserved on update - use set_game_notes to change them)
 pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO game_stats (id, player1_id, player2_id, player1_port, player2_port,
                                   player1_character, player2_character, player1_color, player2_color,
                                   winner_port, loser_port, stage, game_duration, total_frames,
-                                  is_pal, played_on, created_at, slp_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                                  is_pal, played_on, created_at, slp_path, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
          ON CONFLICT(id) DO UPDATE SET
             player1_id = excluded.player1_id,
             player2_id = excluded.player2_id,
@@ -485,8 +488,35 @@ pub fn upsert_game_stats(conn: &Connection, stats: &GameStatsRow) -> rusqlite::R
             stats.played_on,
             stats.created_at,
             stats.slp_path,
+            stats.notes,
         ],
     )?;
+    Ok(())
+}
+
+/// Get game notes for a recording/game by id (game_stats.id or recordings.id)
+pub fn get_game_notes(conn: &Connection, id: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT notes FROM game_stats WHERE id = ?",
+        params![id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .optional()
+    .map(|o| o.flatten())
+}
+
+/// Set game notes for a recording/game. Creates a game_stats row with only id and notes if none exists.
+pub fn set_game_notes(conn: &Connection, id: &str, notes: Option<&str>) -> rusqlite::Result<()> {
+    let updated = conn.execute(
+        "UPDATE game_stats SET notes = ? WHERE id = ?",
+        params![notes, id],
+    )?;
+    if updated == 0 {
+        conn.execute(
+            "INSERT INTO game_stats (id, notes) VALUES (?, ?)",
+            params![id, notes],
+        )?;
+    }
     Ok(())
 }
 

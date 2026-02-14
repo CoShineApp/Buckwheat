@@ -331,6 +331,7 @@ pub async fn save_computed_stats(
         played_on: stats.played_on.clone(),
         created_at: stats.created_at.clone(),
         slp_path: Some(stats.slp_path.clone()),
+        notes: None, // Preserve existing notes on update; user edits via set_game_notes
     };
     
     database::upsert_game_stats(&conn, &game_stats)
@@ -441,6 +442,31 @@ pub async fn get_player_stats(
     
     database::get_player_stats_by_recording(&conn, &recording_id)
         .map_err(|e| Error::RecordingFailed(format!("Failed to get player stats: {}", e)))
+}
+
+/// Get game notes for a recording/game by id
+#[tauri::command]
+pub async fn get_game_notes(
+    recording_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, Error> {
+    let db = state.database.clone();
+    let conn = db.connection();
+    database::get_game_notes(&conn, &recording_id)
+        .map_err(|e| Error::RecordingFailed(format!("Failed to get game notes: {}", e)))
+}
+
+/// Set game notes for a recording/game (creates game_stats row if needed)
+#[tauri::command]
+pub async fn set_game_notes(
+    recording_id: String,
+    notes: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), Error> {
+    let db = state.database.clone();
+    let conn = db.connection();
+    database::set_game_notes(&conn, &recording_id, notes.as_deref())
+        .map_err(|e| Error::RecordingFailed(format!("Failed to set game notes: {}", e)))
 }
 
 /// Get aggregated stats for a player across all recordings

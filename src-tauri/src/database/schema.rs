@@ -5,7 +5,7 @@
 use rusqlite::Connection;
 
 /// Current schema version - bump this to force a recreate
-const SCHEMA_VERSION: i32 = 8;
+const SCHEMA_VERSION: i32 = 9;
 
 /// Initialize the database schema
 /// Drops and recreates all tables if version doesn't match
@@ -127,7 +127,10 @@ fn recreate_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             created_at TEXT,  -- ISO 8601 timestamp when game was played
             
             -- For deduplication of historical games
-            slp_path TEXT UNIQUE
+            slp_path TEXT UNIQUE,
+
+            -- User-editable notes about the game
+            notes TEXT
         );
         
         -- Indexes for game_stats
