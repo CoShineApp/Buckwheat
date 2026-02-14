@@ -1,5 +1,4 @@
 <script lang="ts">
-import RecordingStats from "$lib/components/recordings/RecordingStats.svelte";
 import RecordingsTable from "$lib/components/recordings/RecordingsTable.svelte";
 import BatchActions from "$lib/components/recordings/BatchActions.svelte";
 import StorageUsageBar from "$lib/components/cloud/StorageUsageBar.svelte";
