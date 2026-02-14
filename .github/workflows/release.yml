@@ -1,3 +1,7 @@
+# Release: bumps version, builds signed Windows MSI + macOS DMG, uploads to GitHub Release.
+# Optional: signs update bundle and uploads to R2 for in-app updater.
+# Required secrets: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD (contents of your .key file and its password).
+# Optional R2 (for auto-updater): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL (e.g. https://pub-xxx.r2.dev).
 name: Release
 
 on:
@@ -18,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      version_raw: ${{ steps.version.outputs.version_raw }}
       release_id: ${{ steps.release.outputs.id }}
     steps:
       - name: Checkout code
@@ -52,7 +57,9 @@ jobs:
             fi
           fi
           
+          NEW_VERSION_RAW="${NEW_VERSION#v}"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_raw=$NEW_VERSION_RAW" >> $GITHUB_OUTPUT
           echo "Creating release for version: $NEW_VERSION"
 
       - name: Create GitHub Release
@@ -104,6 +111,13 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Set version in project files
+        run: |
+          $version = "${{ needs.create-release.outputs.version_raw }}"
+          (Get-Content src-tauri/tauri.conf.json -Raw) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content src-tauri/tauri.conf.json -NoNewline
+          (Get-Content package.json -Raw) -replace '"version":\s*"[^"]*"', "`"version`": `"$version`"" | Set-Content package.json -NoNewline
+        shell: pwsh
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -132,14 +146,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_CLIPS_CDN_URL: ${{ secrets.VITE_CLIPS_CDN_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        # env:
-        #   # Placeholder for Windows code signing (uncomment when ready)
-        #   # CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        #   # CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-        run: |
-          # Uncomment when code signing is configured:
-          # echo "$CERTIFICATE_BASE64" | base64 -d > certificate.pfx
-          bunx tauri build --target x86_64-pc-windows-msvc -- --features real-recording
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bunx tauri build --target x86_64-pc-windows-msvc -- --features real-recording
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -149,6 +158,85 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           retention-days: 30
+
+  windows-updater:
+    name: Sign & publish updater (Windows)
+    needs: [create-release, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: ./windows-artifacts
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Zip and sign MSI for updater
+        id: sign
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          VERSION="${{ needs.create-release.outputs.version_raw }}"
+          MSI="windows-artifacts/Peppi_${VERSION}_x64_en-US.msi"
+          if [ ! -f "$MSI" ]; then
+            MSI=$(ls windows-artifacts/*.msi 2>/dev/null | head -1)
+          fi
+          if [ -z "$MSI" ] || [ ! -f "$MSI" ]; then
+            echo "No MSI found" && exit 1
+          fi
+          zip -j "Peppi_${VERSION}_x64_en-US.msi.zip" "$MSI"
+          bunx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "Peppi_${VERSION}_x64_en-US.msi.zip"
+          SIGNATURE=$(cat "Peppi_${VERSION}_x64_en-US.msi.zip.sig" | tr -d '\n')
+          echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
+          echo "msi_zip=Peppi_${VERSION}_x64_en-US.msi.zip" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json
+        id: latest
+        env:
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+        run: |
+          VERSION="${{ steps.sign.outputs.version }}"
+          SIGNATURE="${{ steps.sign.outputs.signature }}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BASE_URL="${R2_PUBLIC_URL:-https://pub-a7a1511ed0f84ebbb1afa93d4fe41cb6.r2.dev}"
+          URL="${BASE_URL%/}/msi/Peppi_${VERSION}_x64_en-US.msi.zip"
+          echo '{"version":"'"$VERSION"'","notes":"See GitHub release","pub_date":"'"$PUB_DATE"'","platforms":{"windows-x86_64":{"signature":"'"$SIGNATURE"'","url":"'"$URL"'"}}}' > latest.json
+          cat latest.json
+
+      - name: Upload to R2 (S3-compatible)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          if [ -z "$R2_ACCESS_KEY_ID" ]; then
+            echo "R2 secrets not set, skipping upload (latest.json is in artifacts)"
+            exit 0
+          fi
+          pip install awscli
+          export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+          export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+          export AWS_DEFAULT_REGION=auto
+          aws s3 cp "${{ steps.sign.outputs.msi_zip }}" "s3://$R2_BUCKET_NAME/msi/${{ steps.sign.outputs.msi_zip }}" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          aws s3 cp latest.json "s3://$R2_BUCKET_NAME/latest.json" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type "application/json"
+        continue-on-error: true
+
+      - name: Upload latest.json artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-latest
+          path: latest.json
+          retention-days: 90
 
   build-macos:
     name: Build macOS

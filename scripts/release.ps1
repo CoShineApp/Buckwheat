@@ -15,8 +15,8 @@ $ErrorActionPreference = "Stop"
 # Colors for output
 function Write-Step { param($msg) Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 function Write-Info { param($msg) Write-Host "  $msg" -ForegroundColor White }
-function Write-Success { param($msg) Write-Host "  ✓ $msg" -ForegroundColor Green }
-function Write-Warning { param($msg) Write-Host "  ⚠ $msg" -ForegroundColor Yellow }
+function Write-Success { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
+function Write-Warning { param($msg) Write-Host "  [!] $msg" -ForegroundColor Yellow }
 
 # Project paths
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
@@ -37,7 +37,7 @@ Write-Info "Current version: $currentVersion"
 
 # Prompt for version if not provided
 if (-not $Version) {
-    $Version = Read-Host "Enter new version (e.g., 1.0.2)"
+    $Version = Read-Host 'Enter new version (e.g. 1.0.2)'
     if (-not $Version) {
         Write-Error "Version is required"
         exit 1
@@ -46,7 +46,7 @@ if (-not $Version) {
 
 # Validate version format
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    Write-Error "Invalid version format. Expected: X.Y.Z (e.g., 1.0.2)"
+    Write-Error 'Invalid version format. Expected: X.Y.Z (e.g. 1.0.2)'
     exit 1
 }
 
@@ -119,7 +119,7 @@ if (-not $SkipBuild) {
     }
     Write-Success "Build completed"
 } else {
-    Write-Warning "Skipping build (--SkipBuild flag set)"
+    Write-Warning 'Skipping build (-SkipBuild flag set)'
 }
 
 # ============================================================================
@@ -202,19 +202,8 @@ if (-not $Notes) {
     }
 }
 
-$latestContent = @"
-{
-    "version": "$Version",
-    "notes": "$Notes",
-    "pub_date": "$pubDate",
-    "platforms": {
-      "windows-x86_64": {
-        "signature": "$signature",
-        "url": "$downloadUrl"
-      }
-    }
-}
-"@
+$notesEscaped = $Notes -replace '\\', '\\\\' -replace '"', '\"'
+$latestContent = '{"version":"' + $Version + '","notes":"' + $notesEscaped + '","pub_date":"' + $pubDate + '","platforms":{"windows-x86_64":{"signature":"' + $signature + '","url":"' + $downloadUrl + '"}}}'
 
 Write-Info "Updating latest.json..."
 if (-not $DryRun) {
@@ -248,8 +237,8 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Upload ZIP to R2: msi/${msiPattern}.zip" -ForegroundColor White
 Write-Host "  2. Upload latest.json to R2 (or commit to repo)" -ForegroundColor White
-Write-Host "  3. git add -A && git commit -m `"Release v$Version`"" -ForegroundColor White
-Write-Host "  4. git tag v$Version && git push --tags" -ForegroundColor White
+Write-Host ('  3. git add -A; git commit -m "Release v' + $Version + '"') -ForegroundColor White
+Write-Host "  4. git tag v$Version; git push --tags" -ForegroundColor White
 Write-Host ""
 
 # Copy signature to clipboard
