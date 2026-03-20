@@ -66,9 +66,8 @@ pub fn run() {
             let db_path = database::get_database_path(app.handle());
             log::info!("📦 Initializing database at: {:?}", db_path);
             
-            let db = database::Database::open(&db_path)
-                .expect("Failed to open database");
-            db.init().expect("Failed to initialize database schema");
+            let db = database::Database::open(&db_path)?;
+            db.init()?;
             
             log::info!("✅ Database initialized");
             

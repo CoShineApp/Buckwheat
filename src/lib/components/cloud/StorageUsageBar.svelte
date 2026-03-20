@@ -2,14 +2,7 @@
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { auth } from '$lib/stores/auth.svelte';
 	import { HardDrive } from '@lucide/svelte';
-
-	function formatBytes(bytes: number): string {
-		if (bytes === 0) return '0 B';
-		const k = 1024;
-		const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-	}
+	import { formatFileSize } from '$lib/utils/format';
 </script>
 
 {#if auth.isAuthenticated && auth.profile}
@@ -22,7 +15,7 @@
 						<span class="font-medium">Cloud Storage</span>
 					</div>
 					<span class="text-muted-foreground">
-						{formatBytes(auth.profile.storage_used)} / {formatBytes(auth.profile.storage_limit)}
+						{formatFileSize(auth.profile.storage_used)} / {formatFileSize(auth.profile.storage_limit)}
 					</span>
 				</div>
 

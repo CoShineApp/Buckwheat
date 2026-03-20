@@ -53,13 +53,13 @@ impl Database {
     
     /// Initialize the database schema
     pub fn init(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().expect("Database mutex poisoned");
         schema::init_database(&conn)
     }
     
     /// Get a reference to the connection (for operations)
     pub fn connection(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap()
+        self.conn.lock().expect("Database mutex poisoned")
     }
 }
 

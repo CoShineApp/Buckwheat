@@ -15,6 +15,7 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import { save } from '@tauri-apps/plugin-dialog';
+	import { formatFileSize } from '$lib/utils/format';
 
 	let isDeleting = $state<string | null>(null);
 	let isDownloading = $state<string | null>(null);
@@ -106,14 +107,6 @@
 		}
 	}
 
-	function formatBytes(bytes: number): string {
-		if (bytes === 0) return '0 B';
-		const k = 1024;
-		const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-	}
-
 	function formatDate(dateString: string): string {
 		const date = new Date(dateString);
 		return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {
@@ -189,7 +182,7 @@
 								<TableCell class="font-medium max-w-[200px] truncate" title={item.filename}>
 									{item.filename}
 								</TableCell>
-								<TableCell>{formatBytes(item.file_size)}</TableCell>
+								<TableCell>{formatFileSize(item.file_size)}</TableCell>
 								<TableCell class="text-sm">{formatDate(item.uploaded_at)}</TableCell>
 								<TableCell>
 									{#if item.type === 'clip' && item.share_code}

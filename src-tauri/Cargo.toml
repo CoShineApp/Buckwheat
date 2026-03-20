@@ -1,6 +1,6 @@
 [package]
 name = "peppi"
-version = "1.0.0"
+version = "1.0.3"
 description = "Headless recording for SSBM through Slippi/Dolphin plus cloud storage"
 authors = ["hatsupatsu"]
 edition = "2021"
