@@ -7,11 +7,26 @@
 	import { Label } from "$lib/components/ui/label";
 	import { Switch } from "$lib/components/ui/switch";
 	import { Separator } from "$lib/components/ui/separator";
-	import { Gamepad2, Folder } from "@lucide/svelte";
+	import { Gamepad2, Folder, Monitor } from "@lucide/svelte";
 	import { onMount } from "svelte";
 	import { formatFileSize } from "$lib/utils/format";
 
 	let storageUsage = $state<{ totalBytes: number; recordingCount: number } | null>(null);
+	let obsTestStatus = $state<"idle" | "testing" | "success" | "error">("idle");
+	let obsTestMessage = $state("");
+
+	async function testObsConnection(): Promise<void> {
+		obsTestStatus = "testing";
+		obsTestMessage = "";
+		try {
+			await invoke("ensure_obs_ready");
+			obsTestStatus = "success";
+			obsTestMessage = "Connected successfully";
+		} catch (error) {
+			obsTestStatus = "error";
+			obsTestMessage = String(error);
+		}
+	}
 
 	const storagePercentage = $derived.by(() => {
 		if (!storageUsage || settings.storageLimit === 0) return 0;
@@ -132,6 +147,96 @@
 							></div>
 						</div>
 					{/if}
+				</div>
+			{/if}
+		</div>
+
+		<Separator />
+
+		<!-- OBS Integration Section -->
+		<div class="space-y-4">
+			<div class="flex items-center gap-2">
+				<Monitor class="size-4" />
+				<Label>OBS Integration</Label>
+			</div>
+
+			<div class="space-y-3">
+				<label class="flex items-center gap-3 cursor-pointer">
+					<input
+						type="radio"
+						name="obs-mode"
+						value="managed"
+						checked={settings.obsMode === "managed"}
+						onchange={() => settings.set("obsMode", "managed")}
+						class="accent-primary"
+					/>
+					<div>
+						<span class="text-sm font-medium">Automatic</span>
+						<span class="text-xs text-muted-foreground ml-1">(recommended)</span>
+						<p class="text-xs text-muted-foreground">Peppi manages OBS for you</p>
+					</div>
+				</label>
+
+				<label class="flex items-center gap-3 cursor-pointer">
+					<input
+						type="radio"
+						name="obs-mode"
+						value="connect"
+						checked={settings.obsMode === "connect"}
+						onchange={() => settings.set("obsMode", "connect")}
+						class="accent-primary"
+					/>
+					<div>
+						<span class="text-sm font-medium">Connect to my OBS</span>
+						<p class="text-xs text-muted-foreground">For streamers who already use OBS</p>
+					</div>
+				</label>
+			</div>
+
+			{#if settings.obsMode === "connect"}
+				<div class="space-y-3 pl-6 border-l-2 border-muted">
+					<div class="space-y-1">
+						<Label for="obs-port">WebSocket Port</Label>
+						<input
+							id="obs-port"
+							type="number"
+							min="1"
+							max="65535"
+							class="flex h-9 w-24 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+							value={settings.obsPort}
+							oninput={(e) => {
+								const value = parseInt(e.currentTarget.value) || 4455;
+								settings.set("obsPort", Math.max(1, Math.min(65535, value)));
+							}}
+						/>
+					</div>
+
+					<div class="space-y-1">
+						<Label for="obs-password">Password</Label>
+						<input
+							id="obs-password"
+							type="password"
+							placeholder="Leave empty if no password"
+							class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+							value={settings.obsPassword}
+							oninput={(e) => settings.set("obsPassword", e.currentTarget.value)}
+						/>
+					</div>
+
+					<div class="flex items-center gap-2">
+						<button
+							class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3"
+							onclick={testObsConnection}
+							disabled={obsTestStatus === "testing"}
+						>
+							{obsTestStatus === "testing" ? "Testing..." : "Test Connection"}
+						</button>
+						{#if obsTestStatus === "success"}
+							<span class="text-xs text-green-600 dark:text-green-400">{obsTestMessage}</span>
+						{:else if obsTestStatus === "error"}
+							<span class="text-xs text-destructive">{obsTestMessage}</span>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>

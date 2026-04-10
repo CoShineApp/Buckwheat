@@ -4,7 +4,7 @@
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;
-use crate::commands::recording::{configure_target_window, resolve_recording_quality, start_recording_with_quality};
+use crate::commands::recording::{resolve_recording_quality, start_recording_with_quality};
 use crate::events::{game as game_events, recording as recording_events};
 use crate::game_detector::{slippi_paths, GameDetector};
 use crate::library;
@@ -317,7 +317,6 @@ async fn trigger_auto_recording(app: tauri::AppHandle, slp_path: String) -> Resu
         quality.bitrate() / 1_000_000
     );
     
-    configure_target_window(&state);
     start_recording_with_quality(&state, &output_path, quality)?;
     
     // Track the video output path

@@ -5,7 +5,6 @@
 	import GeneralSettings from "$lib/components/settings/GeneralSettings.svelte";
 	import SlippiSettings from "$lib/components/settings/SlippiSettings.svelte";
 	import RecordingSettings from "$lib/components/settings/RecordingSettings.svelte";
-	import WindowSelector from "$lib/components/settings/WindowSelector.svelte";
 	import { Button } from "$lib/components/ui/button";
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card";
 	import { InputGroup, InputGroupInput, InputGroupButton } from "$lib/components/ui/input-group";
@@ -54,8 +53,6 @@
 		<RecordingSettings />
 
 		<SlippiSettings />
-
-		<WindowSelector />
 
 		<!-- Clips Settings -->
 		<Card>

@@ -5,6 +5,7 @@ mod database;
 mod events;
 mod game_detector;
 mod library;
+mod obs;
 mod recorder;
 mod slippi;
 mod window_detector;
@@ -26,7 +27,7 @@ use commands::library::{
     save_computed_stats, list_slp_files, check_slp_synced,
 };
 // Recording commands
-use commands::recording::{start_generic_recording, start_recording, stop_recording};
+use commands::recording::{start_generic_recording, start_recording, stop_recording, ensure_obs_ready, install_obs};
 // Settings commands
 use commands::settings::{
     get_recording_directory, get_setting, get_settings_path, open_settings_folder,
@@ -61,16 +62,16 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            
+
             // Initialize SQLite database
             let db_path = database::get_database_path(app.handle());
-            log::info!("📦 Initializing database at: {:?}", db_path);
-            
+            log::info!("Initializing database at: {:?}", db_path);
+
             let db = database::Database::open(&db_path)?;
             db.init()?;
-            
-            log::info!("✅ Database initialized");
-            
+
+            log::info!("Database initialized");
+
             // Initialize app state with database
             app.manage(app_state::AppState::with_database(db));
 
@@ -79,12 +80,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 // Small delay to let the app finish initializing
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
+
                 if let Err(e) = library::sync_recordings_cache(&app_handle).await {
                     log::error!("Failed to sync recordings cache: {:?}", e);
                 }
             });
-            
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +97,8 @@ pub fn run() {
             start_recording,
             start_generic_recording,
             stop_recording,
+            ensure_obs_ready,
+            install_obs,
             get_recordings,
             delete_recording,
             open_video,
@@ -136,6 +139,16 @@ pub fn run() {
             list_slp_files,
             check_slp_synced,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Drop the recorder to kill managed OBS process
+                if let Some(state) = app.try_state::<app_state::AppState>() {
+                    if let Ok(mut recorder_lock) = state.recorder.lock() {
+                        let _ = recorder_lock.take();
+                    }
+                }
+            }
+        });
 }

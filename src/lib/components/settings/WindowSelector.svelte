@@ -1,3 +1,7 @@
+<!--
+	@deprecated No longer used in settings UI. OBS handles game capture directly
+	via game_capture with any_fullscreen mode. Kept for potential future use.
+-->
 <script lang="ts">
 	import { Button } from "$lib/components/ui/button";
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "$lib/components/ui/card";

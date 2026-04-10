@@ -47,6 +47,13 @@ export type Settings = {
 
 	/** Maximum storage limit for recordings in GB (0 = unlimited) */
 	storageLimit: number;
+
+	/** OBS integration mode */
+	obsMode: "managed" | "connect";
+	/** OBS WebSocket port (for connect mode) */
+	obsPort: number;
+	/** OBS WebSocket password (for connect mode) */
+	obsPassword: string;
 };
 
 /** Default settings values */
@@ -60,6 +67,9 @@ const DEFAULT_SETTINGS: Settings = {
 	clipDuration: 30,
 	slippiCode: "",
 	storageLimit: 0,
+	obsMode: "managed",
+	obsPort: 4455,
+	obsPassword: "",
 };
 
 /**
@@ -89,6 +99,12 @@ class SettingsStore {
 	slippiCode = $state("");
 	/** Maximum storage limit for recordings in GB (0 = unlimited) */
 	storageLimit = $state(0);
+	/** OBS integration mode */
+	obsMode = $state<Settings["obsMode"]>("managed");
+	/** OBS WebSocket port */
+	obsPort = $state(4455);
+	/** OBS WebSocket password */
+	obsPassword = $state("");
 
 	/** Whether settings are currently loading */
 	isLoading = $state(true);
@@ -129,6 +145,9 @@ class SettingsStore {
 		this.clipDuration = settings.clipDuration;
 		this.slippiCode = settings.slippiCode;
 		this.storageLimit = settings.storageLimit;
+		this.obsMode = settings.obsMode;
+		this.obsPort = settings.obsPort;
+		this.obsPassword = settings.obsPassword;
 	}
 
 	/** Reset reactive state to default values */
@@ -142,6 +161,9 @@ class SettingsStore {
 		this.clipDuration = DEFAULT_SETTINGS.clipDuration;
 		this.slippiCode = DEFAULT_SETTINGS.slippiCode;
 		this.storageLimit = DEFAULT_SETTINGS.storageLimit;
+		this.obsMode = DEFAULT_SETTINGS.obsMode;
+		this.obsPort = DEFAULT_SETTINGS.obsPort;
+		this.obsPassword = DEFAULT_SETTINGS.obsPassword;
 	}
 
 	/** Get all settings from persistent store */
@@ -158,6 +180,9 @@ class SettingsStore {
 			clipDuration: ((await this.store.get("clipDuration")) as number) ?? DEFAULT_SETTINGS.clipDuration,
 			slippiCode: ((await this.store.get("slippiCode")) as string) ?? DEFAULT_SETTINGS.slippiCode,
 			storageLimit: ((await this.store.get("storageLimit")) as number) ?? DEFAULT_SETTINGS.storageLimit,
+			obsMode: ((await this.store.get("obsMode")) as Settings["obsMode"]) ?? DEFAULT_SETTINGS.obsMode,
+			obsPort: ((await this.store.get("obsPort")) as number) ?? DEFAULT_SETTINGS.obsPort,
+			obsPassword: ((await this.store.get("obsPassword")) as string) ?? DEFAULT_SETTINGS.obsPassword,
 		};
 	}
 
@@ -197,6 +222,15 @@ class SettingsStore {
 			case "storageLimit":
 				this.storageLimit = value as number;
 				break;
+			case "obsMode":
+				this.obsMode = value as Settings["obsMode"];
+				break;
+			case "obsPort":
+				this.obsPort = value as number;
+				break;
+			case "obsPassword":
+				this.obsPassword = value as string;
+				break;
 		}
 		
 		// Persist to store if available
@@ -223,6 +257,9 @@ class SettingsStore {
 			"clipDuration",
 			"slippiCode",
 			"storageLimit",
+			"obsMode",
+			"obsPort",
+			"obsPassword",
 		];
 
 		for (const key of keys) {
