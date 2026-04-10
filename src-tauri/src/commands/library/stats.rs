@@ -187,6 +187,9 @@ pub async fn save_computed_stats(
         is_pal: Some(stats.is_pal),
         played_on: stats.played_on.clone(),
         created_at: stats.created_at.clone(),
+        match_id: stats.match_id.clone(),
+        game_number: stats.game_number,
+        game_end_method: stats.game_end_method.clone(),
         slp_path: Some(stats.slp_path.clone()),
         notes: None, // Preserve existing notes on update; user edits via set_game_notes
     };

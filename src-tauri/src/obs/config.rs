@@ -9,10 +9,20 @@ pub struct ObsSettings {
     pub websocket_password: String,
 }
 
-/// Generate a complete portable OBS config directory.
+/// Get the standard OBS config directory (%APPDATA%/obs-studio on Windows).
+fn obs_config_dir() -> Result<std::path::PathBuf, String> {
+    dirs::config_dir()
+        .map(|d| d.join("obs-studio"))
+        .ok_or_else(|| "Cannot find OBS config directory".into())
+}
+
+/// Generate a Peppi profile and scene collection inside the standard OBS config.
+///
+/// Writes into `%APPDATA%/obs-studio/` so OBS can find its data files (locale,
+/// themes) normally. The Peppi profile/scenes are selected at launch via
+/// `--profile Peppi --collection Peppi`.
 pub fn generate_portable_config(config_dir: &Path, settings: &ObsSettings) -> Result<(), String> {
-    // Create directory structure
-    let obs_config = config_dir.join("config").join("obs-studio");
+    let obs_config = obs_config_dir()?;
     let ws_config = obs_config.join("plugin_config").join("obs-websocket");
     let profile_dir = obs_config.join("basic").join("profiles").join("Peppi");
     let scenes_dir = obs_config.join("basic").join("scenes");
@@ -22,25 +32,7 @@ pub fn generate_portable_config(config_dir: &Path, settings: &ObsSettings) -> Re
             .map_err(|e| format!("Failed to create config dir: {e}"))?;
     }
 
-    // portable_mode.txt — empty file that tells OBS to use portable mode
-    std::fs::write(config_dir.join("portable_mode.txt"), "")
-        .map_err(|e| format!("Failed to write portable_mode.txt: {e}"))?;
-
-    // global.ini — disable first-run wizard and update checks
-    let global_ini = "[General]\n\
-        FirstRun=true\n\
-        LastVersion=503316480\n\
-        \n\
-        [BasicWindow]\n\
-        SysTrayEnabled=true\n\
-        SysTrayMinimizeToTray=true\n\
-        \n\
-        [Update]\n\
-        EnableAutoUpdates=false\n";
-    std::fs::write(obs_config.join("global.ini"), global_ini)
-        .map_err(|e| format!("Failed to write global.ini: {e}"))?;
-
-    // WebSocket config
+    // WebSocket config (shared across profiles)
     let ws_json = serde_json::json!({
         "server_enabled": true,
         "server_port": settings.websocket_port,
@@ -60,7 +52,7 @@ pub fn generate_portable_config(config_dir: &Path, settings: &ObsSettings) -> Re
     // Scene collection
     write_scene_config(&scenes_dir)?;
 
-    log::info!("Generated portable OBS config at {:?}", config_dir);
+    log::info!("Generated Peppi OBS profile at {:?}", profile_dir);
     Ok(())
 }
 
@@ -175,10 +167,8 @@ fn platform_capture_source() -> serde_json::Value {
 }
 
 /// Update just the recording output path in the profile.
-pub fn update_recording_path(config_dir: &Path, output_dir: &str) -> Result<(), String> {
-    let ini_path = config_dir
-        .join("config")
-        .join("obs-studio")
+pub fn update_recording_path(_config_dir: &Path, output_dir: &str) -> Result<(), String> {
+    let ini_path = obs_config_dir()?
         .join("basic")
         .join("profiles")
         .join("Peppi")
@@ -209,10 +199,8 @@ pub fn update_recording_path(config_dir: &Path, output_dir: &str) -> Result<(), 
 }
 
 /// Update quality settings in the profile.
-pub fn update_quality(config_dir: &Path, quality: &RecordingQuality) -> Result<(), String> {
-    let ini_path = config_dir
-        .join("config")
-        .join("obs-studio")
+pub fn update_quality(_config_dir: &Path, quality: &RecordingQuality) -> Result<(), String> {
+    let ini_path = obs_config_dir()?
         .join("basic")
         .join("profiles")
         .join("Peppi")

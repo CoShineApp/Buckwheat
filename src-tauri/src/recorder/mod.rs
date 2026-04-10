@@ -81,16 +81,8 @@ pub trait Recorder {
     fn is_recording(&self) -> bool;
 }
 
-pub fn get_recorder() -> Box<dyn Recorder + Send> {
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        log::info!("Initializing OBS recorder");
-        Box::new(obs::ObsRecorder::managed_mode())
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        log::info!("Mock recorder (unsupported platform)");
-        Box::new(mock::MockRecorder::new())
-    }
+/// Create a recorder that connects to the user's running OBS instance.
+pub fn get_recorder(port: u16, password: String) -> Box<dyn Recorder + Send> {
+    log::info!("Initializing OBS recorder (connecting to port {})", port);
+    Box::new(obs::ObsRecorder::new(port, password))
 }

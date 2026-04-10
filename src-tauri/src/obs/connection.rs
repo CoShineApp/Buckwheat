@@ -14,6 +14,15 @@ impl ObsConnection {
         Ok(Self { client })
     }
 
+    /// Set the directory OBS will write recordings to.
+    pub async fn set_record_directory(&self, directory: &str) -> Result<(), String> {
+        self.client
+            .config()
+            .set_record_directory(directory)
+            .await
+            .map_err(|e| format!("Failed to set OBS record directory: {e}"))
+    }
+
     /// Start recording.
     pub async fn start_recording(&self) -> Result<(), String> {
         self.client

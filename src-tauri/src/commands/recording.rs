@@ -113,21 +113,22 @@ pub async fn stop_recording(
     }
 }
 
-/// Check if OBS is installed and ready.
+/// Test the OBS websocket connection with the configured port/password.
 #[tauri::command]
-pub async fn ensure_obs_ready() -> Result<(), Error> {
-    crate::obs::install::ensure_obs_available()
-        .await
-        .map_err(|e| Error::InitializationError(format!("OBS not ready: {e}")))?;
+pub async fn ensure_obs_ready(
+    state: State<'_, AppState>,
+) -> Result<(), Error> {
+    let (port, password) = read_obs_settings(&state)?;
+
+    crate::recorder::obs::ObsRecorder::test_connection(port, &password)
+        .map_err(|e| Error::InitializationError(format!("{e}")))?;
+
     Ok(())
 }
 
-/// Trigger OBS download and silent install.
+/// No-op kept for frontend compat — OBS is managed by the user now.
 #[tauri::command]
 pub async fn install_obs() -> Result<(), Error> {
-    crate::obs::install::ensure_obs_available()
-        .await
-        .map_err(|e| Error::InitializationError(format!("OBS install failed: {e}")))?;
     Ok(())
 }
 
@@ -170,6 +171,27 @@ fn log_quality_info(quality: &RecordingQuality) {
     );
 }
 
+/// Read OBS websocket port and password from app settings.
+fn read_obs_settings(state: &State<'_, AppState>) -> Result<(u16, String), Error> {
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|e| Error::InitializationError(format!("Failed to lock settings: {e}")))?;
+
+    let port = settings
+        .get("obsPort")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(4455) as u16;
+
+    let password = settings
+        .get("obsPassword")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok((port, password))
+}
+
 pub(crate) fn start_recording_with_quality(
     state: &State<'_, AppState>,
     output_path: &str,
@@ -181,7 +203,8 @@ pub(crate) fn start_recording_with_quality(
         .map_err(|e| Error::InitializationError(format!("Failed to lock recorder: {}", e)))?;
 
     if recorder_lock.is_none() {
-        *recorder_lock = Some(recorder::get_recorder());
+        let (port, password) = read_obs_settings(state)?;
+        *recorder_lock = Some(recorder::get_recorder(port, password));
     }
 
     if let Some(recorder) = recorder_lock.as_mut() {
