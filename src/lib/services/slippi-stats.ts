@@ -12,12 +12,9 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import type { GameStatsForDB, PlayerStatsForDB, ConversionForDisplay } from "$lib/types/slippi-stats";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SlippiStats = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SlippiOverall = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SlippiActionCounts = any;
+type SlippiStats = Record<string, unknown>;
+type SlippiOverall = Record<string, unknown>;
+type SlippiActionCounts = Record<string, unknown>;
 
 /**
  * Safely get a number from a value that might be a number or an object with count/total.

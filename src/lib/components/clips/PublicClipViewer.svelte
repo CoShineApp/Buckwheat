@@ -6,6 +6,7 @@
 	import { cloudStorage, type Clip } from '$lib/stores/cloud-storage.svelte';
 	import { Film, Share2, Copy } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+	import { formatFileSize } from '$lib/utils/format';
 
 	let shareCode = $state('');
 	let clip = $state<Clip | null>(null);
@@ -46,13 +47,6 @@
 		return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
 	}
 
-	function formatBytes(bytes: number): string {
-		if (bytes === 0) return '0 B';
-		const k = 1024;
-		const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-		const i = Math.floor(Math.log(bytes) / Math.log(k));
-		return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-	}
 </script>
 
 <Card>
@@ -105,7 +99,7 @@
 						</div>
 						<div>
 							<p class="text-muted-foreground">File Size</p>
-							<p class="font-medium">{formatBytes(clip.file_size)}</p>
+							<p class="font-medium">{formatFileSize(clip.file_size)}</p>
 						</div>
 						<div>
 							<p class="text-muted-foreground">Uploaded</p>

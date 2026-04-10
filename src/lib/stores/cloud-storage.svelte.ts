@@ -80,9 +80,9 @@ class CloudStorageStore {
 	 * @param videoPath - Local path to the video file
 	 * @param metadata - Optional metadata to store with the file
 	 */
-	async uploadVideo(videoPath: string, metadata?: Record<string, unknown>) {
-		// Existing upload logic...
-		// (Assuming existing implementation details here)
+	async uploadVideo(_videoPath: string, _metadata?: Record<string, unknown>) {
+		console.warn("uploadVideo() is not yet implemented");
+		return;
 	}
 
 	async refreshUploads() {

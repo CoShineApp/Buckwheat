@@ -1,6 +1,9 @@
 //! Window detection and preview commands
 //!
-//! Thin command handlers that delegate to the window_detector module.
+//! DEPRECATED: These commands predate the OBS sidecar integration. OBS uses
+//! game_capture with any_fullscreen mode, so manual window selection is no
+//! longer needed for recording. These are kept for the sidebar status indicator
+//! but should be removed in a future cleanup.
 
 use crate::app_state::AppState;
 use crate::commands::errors::Error;

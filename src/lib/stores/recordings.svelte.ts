@@ -393,15 +393,16 @@ class RecordingsStore {
 
 	/** Set up Tauri event listeners for recording state changes */
 	private setupRecordingListeners() {
-		invoke<string | null>("get_last_replay_path")
-			.then((path) => {
+		(async () => {
+			try {
+				const path = await invoke<string | null>("get_last_replay_path");
 				if (path) {
 					recording.setReplayPath(path);
 				}
-			})
-			.catch((error) => {
+			} catch (error) {
 				console.error("Failed to get last replay path:", error);
-			});
+			}
+		})();
 
 		this.eventListenerPromises.push(
 			listen<string>("recording-started", (event) => {

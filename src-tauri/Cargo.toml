@@ -1,6 +1,6 @@
 [package]
 name = "peppi"
-version = "1.0.0"
+version = "1.0.3"
 description = "Headless recording for SSBM through Slippi/Dolphin plus cloud storage"
 authors = ["hatsupatsu"]
 edition = "2021"
@@ -8,20 +8,6 @@ edition = "2021"
 [lib]
 name = "peppi_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
-
-[features]
-default = []
-# Enable real screen recording (requires Xcode on macOS, VS on Windows)
-real-recording = [
-    "windows-capture",
-    "cpal",
-    "screencapturekit",
-    "objc",
-    "core-foundation",
-    "core-media-rs",
-    "core-video-rs",
-    "core-graphics",
-]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -49,12 +35,14 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 ffmpeg-sidecar = "2.0"
 # SQLite for persistent metadata cache
 rusqlite = { version = "0.32", features = ["bundled"] }
-# Windows screen capture using Windows.Graphics.Capture API (2.0 has built-in encoder)
-windows-capture = { version = "2.0.0-alpha.7", optional = true }
-# Cross-platform audio capture (for WASAPI loopback on Windows)
-cpal = { version = "0.15", optional = true }
 tauri-plugin-updater = "2.9.0"
 tauri-plugin-process = "2.3.1"
+# OBS websocket client
+obws = "0.15"
+# HTTP client for downloading OBS installer
+reqwest = { version = "0.12", features = ["rustls-tls"], default-features = false }
+# App data directories
+dirs = "6"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
@@ -65,13 +53,5 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
 ] }
-
-# MacOS-specific recording using screencapturekit-rs crate
-# Only required when "real-recording" feature is enabled
-[target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = { git = "https://github.com/doom-fish/screencapturekit-rs", optional = true }
-objc = { version = "0.2", optional = true }
-core-foundation = { version = "0.10", optional = true }
-core-media-rs = { version = "0.3", optional = true }
-core-video-rs = { version = "0.3", optional = true }
-core-graphics = { version = "0.25", optional = true }
+# Windows registry access (find OBS install path)
+winreg = "0.55"

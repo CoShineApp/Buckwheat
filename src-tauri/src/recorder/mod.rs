@@ -1,10 +1,5 @@
 pub mod mock;
-
-#[cfg(all(target_os = "windows", feature = "real-recording"))]
-pub mod windows_v2;
-
-#[cfg(all(target_os = "macos", feature = "real-recording"))]
-pub mod macos;
+pub mod obs;
 
 use crate::commands::errors::Error;
 use serde::{Deserialize, Serialize};
@@ -87,23 +82,15 @@ pub trait Recorder {
 }
 
 pub fn get_recorder() -> Box<dyn Recorder + Send> {
-    #[cfg(all(target_os = "macos", feature = "real-recording"))]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
-        log::info!(
-            "🍎 Initializing MacOS recorder with screencapturekit-rs (real-recording enabled)"
-        );
-        Box::new(macos::MacOSRecorder::new())
+        log::info!("Initializing OBS recorder");
+        Box::new(obs::ObsRecorder::managed_mode())
     }
 
-    #[cfg(all(target_os = "windows", feature = "real-recording"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        log::info!("🪟 Initializing Windows recorder with windows-capture 2.0 (H.264 hardware encoder + cpal audio)");
-        Box::new(windows_v2::WindowsRecorder::new())
-    }
-
-    #[cfg(not(feature = "real-recording"))]
-    {
-        log::info!("🧪 Initializing mock recorder (dev mode - real-recording disabled)");
+        log::info!("Mock recorder (unsupported platform)");
         Box::new(mock::MockRecorder::new())
     }
 }

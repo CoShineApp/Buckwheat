@@ -1,15 +1,9 @@
 /**
  * Tauri command wrappers for game window detection and management.
- * Provides type-safe functions for invoking Rust backend commands.
  *
- * @example
- * import { checkGameWindow, listGameWindows, setGameProcessName } from '$lib/commands';
- *
- * // Check if game is running
- * const isRunning = await checkGameWindow();
- *
- * // List available game windows
- * const windows = await listGameWindows();
+ * @deprecated These commands predate the OBS sidecar integration. OBS uses
+ * game_capture with any_fullscreen mode, so manual window selection is no
+ * longer needed for recording. Kept for the sidebar status indicator only.
  *
  * @module commands
  */
@@ -29,9 +23,8 @@ export const preventDefault = <T extends Event>(fn: (e: T) => void): ((e: T) => 
 };
 
 /**
- * Check if the Slippi/Dolphin game window is currently open.
- * Uses the configured game process name for detection.
- * @returns True if game window is detected, false otherwise
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
+ * Kept for sidebar status indicator.
  */
 export async function checkGameWindow(): Promise<boolean> {
     try {
@@ -43,8 +36,7 @@ export async function checkGameWindow(): Promise<boolean> {
 }
 
 /**
- * Information about a detected game window.
- * Returned by listGameWindows() for user selection.
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export interface GameWindow {
     /** Name of the process (e.g., "Dolphin.exe") */
@@ -68,9 +60,7 @@ export interface GameWindow {
 }
 
 /**
- * List all detected game windows for user selection.
- * Filters for windows that look like Dolphin/Slippi.
- * @returns Array of detected game windows (empty if none found)
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export async function listGameWindows(): Promise<GameWindow[]> {
     try {
@@ -82,9 +72,7 @@ export async function listGameWindows(): Promise<GameWindow[]> {
 }
 
 /**
- * Capture a single-frame preview of the selected game window.
- * Used for visual confirmation of window selection.
- * @returns Base64-encoded PNG string, or null if capture failed
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export async function captureWindowPreview(): Promise<string | null> {
     try {
@@ -96,9 +84,7 @@ export async function captureWindowPreview(): Promise<string | null> {
 }
 
 /**
- * Highlight a game window by bringing it to front and drawing a yellow border.
- * The border is temporary and will be removed after ~1.5 seconds.
- * @param processId - The process ID of the window to highlight
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export async function highlightGameWindow(processId: number): Promise<void> {
     try {
@@ -109,8 +95,7 @@ export async function highlightGameWindow(processId: number): Promise<void> {
 }
 
 /**
- * Get the currently configured game process identifier.
- * @returns The stored process identifier, or null if not set
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export async function getGameProcessName(): Promise<string | null> {
     try {
@@ -122,10 +107,7 @@ export async function getGameProcessName(): Promise<string | null> {
 }
 
 /**
- * Set the game process identifier for detection and recording.
- * This is used to identify which window to capture.
- * @param processName - Process identifier (e.g., "Slippi Dolphin (PID: 12345)")
- * @throws Error if setting fails
+ * @deprecated No longer needed for recording — OBS handles game capture directly.
  */
 export async function setGameProcessName(processName: string): Promise<void> {
     try {
