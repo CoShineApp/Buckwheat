@@ -436,6 +436,22 @@ pub fn upsert_recording(conn: &Connection, row: &RecordingRow) -> rusqlite::Resu
     Ok(())
 }
 
+/// Update the `.slp` file path associated with a recording. Called after stats
+/// are saved so the recording knows which Slippi replay it came from (the
+/// filesystem sync can't always figure this out from video/slp filenames when
+/// OBS uses its own naming scheme).
+pub fn set_recording_slp_path(
+    conn: &Connection,
+    id: &str,
+    slp_path: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE recordings SET slp_path = ? WHERE id = ?",
+        params![slp_path, id],
+    )?;
+    Ok(())
+}
+
 /// Delete a recording by ID
 pub fn delete_recording(conn: &Connection, id: &str) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM recordings WHERE id = ?", params![id])?;

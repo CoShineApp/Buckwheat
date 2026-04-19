@@ -1,4 +1,5 @@
 use super::{Error, Recorder, RecordingQuality};
+use crate::obs::connection::GameWindowInfo;
 use crate::obs::{config, connection, install, process};
 use std::process::Child;
 use std::time::Duration;
@@ -15,6 +16,11 @@ pub struct ObsRecorder {
     is_recording: bool,
     websocket_port: u16,
     websocket_password: String,
+    /// Window to tell OBS to capture. None = use Slippi default.
+    target_window: Option<GameWindowInfo>,
+    /// Scene collection that was active before Peppi switched away from it.
+    /// Restored on stop_recording.
+    saved_collection: Option<String>,
 }
 
 impl ObsRecorder {
@@ -25,62 +31,65 @@ impl ObsRecorder {
             is_recording: false,
             websocket_port: port,
             websocket_password: password,
+            target_window: None,
+            saved_collection: None,
         }
     }
 
-    /// Try to connect to an already-running OBS, or spawn one if needed.
-    fn ensure_connected(&mut self) -> Result<(), Error> {
+
+    /// Try to connect to an already-running OBS, or spawn one if needed (sync, for trait use).
+    pub fn ensure_connected(&mut self) -> Result<(), Error> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(self.ensure_connected_async())
+        })
+    }
+
+    /// Async version of ensure_connected — safe to call directly from async contexts.
+    pub async fn ensure_connected_async(&mut self) -> Result<(), Error> {
         if self.connection.is_some() {
             return Ok(());
         }
 
-        // First, try connecting to an already-running OBS (quick timeout).
-        let quick = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(
-                connection::ObsConnection::connect(
-                    self.websocket_port,
-                    &self.websocket_password,
-                ),
-            )
-        });
-
-        if let Ok(conn) = quick {
-            log::info!(
-                "Connected to existing OBS on port {}",
-                self.websocket_port
-            );
+        // First, try connecting to an already-running OBS.
+        if let Ok(conn) = connection::ObsConnection::connect(
+            self.websocket_port,
+            &self.websocket_password,
+        )
+        .await
+        {
+            log::info!("Connected to existing OBS on port {}", self.websocket_port);
             self.connection = Some(conn);
             return Ok(());
         }
 
         // Nobody home — spawn a managed OBS instance.
-        log::info!("No OBS detected on port {}, launching managed instance", self.websocket_port);
-        self.spawn_managed_obs()?;
+        log::info!(
+            "No OBS detected on port {}, launching managed instance",
+            self.websocket_port
+        );
+        self.spawn_managed_obs_async().await?;
 
-        // Wait for the freshly-spawned OBS to be ready.
-        let conn = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(connection::wait_for_obs_ready(
-                self.websocket_port,
-                &self.websocket_password,
-                Duration::from_secs(30),
-            ))
-        })
+        let conn = connection::wait_for_obs_ready(
+            self.websocket_port,
+            &self.websocket_password,
+            Duration::from_secs(30),
+        )
+        .await
         .map_err(|e| {
-            Error::InitializationError(format!("OBS launched but websocket connection failed: {e}"))
+            Error::InitializationError(format!(
+                "OBS launched but websocket connection failed: {e}"
+            ))
         })?;
 
         self.connection = Some(conn);
         Ok(())
     }
 
-    /// Find OBS, generate a Peppi profile, and spawn it.
-    fn spawn_managed_obs(&mut self) -> Result<(), Error> {
-        // Find OBS installation
-        let obs_exe = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(install::ensure_obs_available())
-        })
-        .map_err(|e| Error::InitializationError(format!("OBS not found: {e}")))?;
+    /// Find OBS, generate a Peppi profile, and spawn it (async).
+    async fn spawn_managed_obs_async(&mut self) -> Result<(), Error> {
+        let obs_exe = install::ensure_obs_available()
+            .await
+            .map_err(|e| Error::InitializationError(format!("OBS not found: {e}")))?;
 
         // Generate Peppi profile + websocket config in the standard OBS config dir
         let config_dir = dirs::data_local_dir()
@@ -134,27 +143,59 @@ impl Recorder for ObsRecorder {
 
         self.ensure_connected()?;
 
+        let window = self
+            .target_window
+            .clone()
+            .unwrap_or_else(GameWindowInfo::default_slippi);
+
         let conn = self
             .connection
             .as_ref()
             .ok_or_else(|| Error::RecordingFailed("No OBS connection".into()))?;
 
-        // Point OBS output to Peppi's recording directory before starting.
         let recording_dir = std::path::Path::new(output_path)
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| output_path.to_string());
 
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(conn.set_record_directory(&recording_dir))
+        // Full start flow: save current collection → switch to Peppi (creating
+        // if needed) → set capture window → size canvas to window → set record
+        // dir → start.
+        let saved_collection = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                // Save current collection (so we can restore it on stop)
+                let current = conn.current_scene_collection().await?;
+
+                // If we're already in Peppi, don't record the "previous" as Peppi —
+                // otherwise we'd never switch back to something useful.
+                let saved = if current == "Peppi" { None } else { Some(current) };
+
+                // Ensure Peppi collection/scene/source exist and switch to it
+                conn.ensure_peppi_setup(&window).await?;
+
+                // Lock to 60fps regardless of OBS's prior setting.
+                if let Err(e) = conn.set_fps_60().await {
+                    log::warn!("Could not force 60fps: {e}");
+                }
+
+                // Match OBS canvas to the window's exact size so the recording is
+                // the window's pixels 1:1 (no letterboxing, no off-centering).
+                if let (Some(w), Some(h)) = (window.width, window.height) {
+                    if let Err(e) = conn.set_canvas_to_window(w, h).await {
+                        log::warn!("Could not resize OBS canvas to {w}x{h}: {e}");
+                    }
+                }
+
+                // Set output directory and start recording
+                conn.set_record_directory(&recording_dir).await?;
+                conn.start_recording().await?;
+
+                Ok::<_, String>(saved)
+            })
         })
         .map_err(|e| Error::RecordingFailed(e))?;
 
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(conn.start_recording())
-        })
-        .map_err(|e| Error::RecordingFailed(e))?;
-
+        self.saved_collection = saved_collection;
         self.is_recording = true;
         log::info!("OBS recording started: {}", output_path);
         Ok(())
@@ -170,8 +211,21 @@ impl Recorder for ObsRecorder {
             .as_ref()
             .ok_or_else(|| Error::RecordingFailed("No OBS connection".into()))?;
 
+        let saved = self.saved_collection.take();
+
         let output_path = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(conn.stop_recording())
+            tokio::runtime::Handle::current().block_on(async {
+                let path = conn.stop_recording().await?;
+
+                // Restore the user's previous scene collection (best-effort)
+                if let Some(name) = saved.as_deref() {
+                    if let Err(e) = conn.set_scene_collection(name).await {
+                        log::warn!("Failed to restore scene collection '{name}': {e}");
+                    }
+                }
+
+                Ok::<_, String>(path)
+            })
         })
         .map_err(|e| Error::RecordingFailed(e))?;
 
@@ -182,6 +236,10 @@ impl Recorder for ObsRecorder {
 
     fn is_recording(&self) -> bool {
         self.is_recording
+    }
+
+    fn set_target_window(&mut self, window: Option<GameWindowInfo>) {
+        self.target_window = window;
     }
 }
 

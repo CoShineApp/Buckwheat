@@ -64,20 +64,24 @@ pub async fn start_watching(
     
     let app_clone2 = app.clone();
     app.listen(game_events::FILE_CREATED, move |event| {
-        let slp_path: &str = event.payload();
+        // Tauri event payloads come through as JSON-encoded strings, so a
+        // plain string path is wrapped in literal quotes. Strip them once
+        // here so every downstream consumer sees a usable filesystem path.
+        let slp_path = event.payload().trim_matches('"').to_string();
+        let slp_path: &str = &slp_path;
         log::info!("========================================");
         log::info!("Received {} event!", game_events::FILE_CREATED);
         log::info!("Payload: {}", slp_path);
         log::info!("========================================");
-        
+
         let app_handle = app_clone.clone();
         let state_ref = app_handle.state::<AppState>();
-        
+
         // Store the last replay path
         if let Ok(mut last_replay) = state_ref.last_replay_path.lock() {
             *last_replay = Some(slp_path.to_string());
             log::info!("Last replay path stored: {}", slp_path);
-            
+
             // Emit event to frontend
             if let Err(e) = app_handle.emit(game_events::LAST_REPLAY_UPDATED, slp_path) {
                 log::error!("Failed to emit {} event: {:?}", game_events::LAST_REPLAY_UPDATED, e);
@@ -97,22 +101,23 @@ pub async fn start_watching(
             }
         }
         
-        // Check if already recording
+        // Check if already recording. The recorder now persists across recordings
+        // (to keep the OBS connection alive), so we can't just check is_some —
+        // ask the recorder directly whether it's actively recording.
         if let Ok(recorder_lock) = state_ref.recorder.lock() {
-            if recorder_lock.is_some() {
+            if recorder_lock.as_ref().map(|r| r.is_recording()).unwrap_or(false) {
                 log::info!("Already recording, skipping");
                 return;
             }
         }
         
         // Track the file for game end detection
-        let slp_path_clean = slp_path.trim_matches('"');
         if let Ok(mut current_file) = state_ref.current_recording_file.lock() {
-            *current_file = Some(slp_path_clean.to_string());
-            log::info!("Tracking recording file for game end detection: {}", slp_path_clean);
+            *current_file = Some(slp_path.to_string());
+            log::info!("Tracking recording file for game end detection: {}", slp_path);
         }
         
-        let slp_path_for_recording = slp_path_clean.to_string();
+        let slp_path_for_recording = slp_path.to_string();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = trigger_auto_recording(app_handle, slp_path_for_recording).await {
                 log::error!("Failed to trigger auto-recording: {:?}", e);
@@ -317,7 +322,7 @@ async fn trigger_auto_recording(app: tauri::AppHandle, slp_path: String) -> Resu
         quality.bitrate() / 1_000_000
     );
     
-    start_recording_with_quality(&state, &output_path, quality)?;
+    start_recording_with_quality(&app, &state, &output_path, quality)?;
     
     // Track the video output path
     if let Ok(mut current_file) = state.current_recording_file.lock() {

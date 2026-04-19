@@ -197,6 +197,14 @@ pub async fn save_computed_stats(
     database::upsert_game_stats(&conn, &game_stats)
         .map_err(|e| Error::RecordingFailed(format!("Failed to save game stats: {}", e)))?;
 
+    // Ensure the recording row knows which .slp it's associated with. OBS picks
+    // its own filename (e.g. "2026-04-18 23-15-42.mp4") which doesn't match
+    // Slippi's `Game_YYYYMMDDThhmmss.slp` format, so the filesystem sync can't
+    // pair them by filename. Setting it explicitly here is authoritative.
+    if let Err(e) = database::set_recording_slp_path(&conn, &stats.recording_id, &stats.slp_path) {
+        log::warn!("[SlippiStats] Could not update recording.slp_path for {}: {e}", stats.recording_id);
+    }
+
     log::info!("[SlippiStats] Saved game_stats: stage={}, winner_port={:?}",
         stats.stage, winner_port);
 

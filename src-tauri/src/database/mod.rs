@@ -8,8 +8,8 @@ mod recordings;
 
 pub use recordings::{
     // Recording operations
-    get_all_recordings, get_recordings_paginated, get_recording_by_video_path, 
-    upsert_recording, delete_recording, get_cached_video_paths,
+    get_all_recordings, get_recordings_paginated, get_recording_by_video_path,
+    upsert_recording, delete_recording, get_cached_video_paths, set_recording_slp_path,
     // Game stats operations
     upsert_game_stats, game_stats_exists_by_slp_path, get_game_notes, set_game_notes,
     // Player stats operations

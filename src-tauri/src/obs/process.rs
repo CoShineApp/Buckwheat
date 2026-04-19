@@ -20,6 +20,8 @@ pub fn spawn_obs(obs_exe: &Path, _config_dir: &Path) -> Result<Child, String> {
 
     cmd.arg("--minimize-to-tray")
         .arg("--disable-shutdown-check")
+        .arg("--disable-updater")
+        .arg("--disable-missing-files-check")
         .arg("--multi")
         .arg("--profile").arg("Peppi")
         .arg("--collection").arg("Peppi");

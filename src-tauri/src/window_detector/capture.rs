@@ -6,9 +6,15 @@ use windows::Win32::Graphics::Gdi::{
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
     HGDIOBJ, SRCCOPY,
 };
+use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClientRect, GetWindowTextW, GetWindowThreadProcessId,
 };
+
+/// PW_RENDERFULLCONTENT (0x2) — tells PrintWindow to render DWM-composited
+/// windows (anything using DirectX/OpenGL, including browsers, game windows,
+/// and modern Windows apps).
+const PW_RENDERFULLCONTENT: PRINT_WINDOW_FLAGS = PRINT_WINDOW_FLAGS(0x00000002);
 
 /// Context for window search enumeration
 struct WindowSearchContext {
@@ -153,24 +159,32 @@ fn capture_hwnd_png(hwnd: HWND) -> Result<Vec<u8>, String> {
             return Err("Failed to select bitmap into memory DC".into());
         }
         
-        let blt_result = BitBlt(
-            hdc_mem,
-            0,
-            0,
-            width,
-            height,
-            hdc_window,
-            0,
-            0,
-            SRCCOPY | CAPTUREBLT,
-        );
-        
-        if let Err(err) = blt_result {
-            let _ = SelectObject(hdc_mem, old_obj);
-            let _ = DeleteObject(HGDIOBJ(hbitmap.0));
-            let _ = DeleteDC(hdc_mem);
-            ReleaseDC(hwnd, hdc_window);
-            return Err(format!("BitBlt failed while copying window content: {}", err));
+        // Try PrintWindow with PW_RENDERFULLCONTENT first — this works for
+        // DWM-composited windows (DirectX/OpenGL, browsers, modern apps).
+        // BitBlt alone returns black/white for those.
+        let pw_ok = PrintWindow(hwnd, hdc_mem, PW_RENDERFULLCONTENT).as_bool();
+
+        if !pw_ok {
+            // Fall back to BitBlt for legacy windows that don't support PrintWindow.
+            let blt_result = BitBlt(
+                hdc_mem,
+                0,
+                0,
+                width,
+                height,
+                hdc_window,
+                0,
+                0,
+                SRCCOPY | CAPTUREBLT,
+            );
+
+            if let Err(err) = blt_result {
+                let _ = SelectObject(hdc_mem, old_obj);
+                let _ = DeleteObject(HGDIOBJ(hbitmap.0));
+                let _ = DeleteDC(hdc_mem);
+                ReleaseDC(hwnd, hdc_window);
+                return Err(format!("Both PrintWindow and BitBlt failed: {}", err));
+            }
         }
         
         let mut info = BITMAPINFO {

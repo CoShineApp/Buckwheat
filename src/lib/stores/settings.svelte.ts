@@ -20,6 +20,20 @@
 import { Store } from "@tauri-apps/plugin-store";
 
 /**
+ * Window target for OBS game capture.
+ * Maps to OBS game_capture's "title:class:executable" format.
+ */
+export type GameWindowInfo = {
+	title: string;
+	className: string;
+	processName: string;
+	/** Window width in pixels at selection time (used to size OBS canvas) */
+	width?: number;
+	/** Window height in pixels at selection time (used to size OBS canvas) */
+	height?: number;
+};
+
+/**
  * Application settings shape.
  * All settings are persisted to disk.
  */
@@ -54,6 +68,9 @@ export type Settings = {
 	obsPort: number;
 	/** OBS WebSocket password (for connect mode) */
 	obsPassword: string;
+
+	/** Selected game window for OBS capture. Null means auto-detect (fallback to Slippi Dolphin.exe). */
+	gameWindow: GameWindowInfo | null;
 };
 
 /** Default settings values */
@@ -70,6 +87,7 @@ const DEFAULT_SETTINGS: Settings = {
 	obsMode: "managed",
 	obsPort: 4455,
 	obsPassword: "",
+	gameWindow: null,
 };
 
 /**
@@ -105,6 +123,8 @@ class SettingsStore {
 	obsPort = $state(4455);
 	/** OBS WebSocket password */
 	obsPassword = $state("");
+	/** Selected game window for OBS capture */
+	gameWindow = $state<GameWindowInfo | null>(null);
 
 	/** Whether settings are currently loading */
 	isLoading = $state(true);
@@ -148,6 +168,7 @@ class SettingsStore {
 		this.obsMode = settings.obsMode;
 		this.obsPort = settings.obsPort;
 		this.obsPassword = settings.obsPassword;
+		this.gameWindow = settings.gameWindow;
 	}
 
 	/** Reset reactive state to default values */
@@ -164,6 +185,7 @@ class SettingsStore {
 		this.obsMode = DEFAULT_SETTINGS.obsMode;
 		this.obsPort = DEFAULT_SETTINGS.obsPort;
 		this.obsPassword = DEFAULT_SETTINGS.obsPassword;
+		this.gameWindow = DEFAULT_SETTINGS.gameWindow;
 	}
 
 	/** Get all settings from persistent store */
@@ -183,6 +205,7 @@ class SettingsStore {
 			obsMode: ((await this.store.get("obsMode")) as Settings["obsMode"]) ?? DEFAULT_SETTINGS.obsMode,
 			obsPort: ((await this.store.get("obsPort")) as number) ?? DEFAULT_SETTINGS.obsPort,
 			obsPassword: ((await this.store.get("obsPassword")) as string) ?? DEFAULT_SETTINGS.obsPassword,
+			gameWindow: ((await this.store.get("gameWindow")) as GameWindowInfo | null) ?? DEFAULT_SETTINGS.gameWindow,
 		};
 	}
 
@@ -231,6 +254,9 @@ class SettingsStore {
 			case "obsPassword":
 				this.obsPassword = value as string;
 				break;
+			case "gameWindow":
+				this.gameWindow = value as GameWindowInfo | null;
+				break;
 		}
 		
 		// Persist to store if available
@@ -260,6 +286,7 @@ class SettingsStore {
 			"obsMode",
 			"obsPort",
 			"obsPassword",
+			"gameWindow",
 		];
 
 		for (const key of keys) {

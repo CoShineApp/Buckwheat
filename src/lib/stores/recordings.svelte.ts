@@ -22,6 +22,10 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+	register as registerShortcut,
+	unregister as unregisterShortcut,
+} from "@tauri-apps/plugin-global-shortcut";
 import type { RecordingSession, RecordingWithMetadata, GameEvent, PaginatedRecordings } from "$lib/types/recording";
 import { handleTauriError, showSuccess, showWarning } from "$lib/utils/errors";
 import { recording } from "$lib/stores/recording.svelte";
@@ -497,19 +501,60 @@ class RecordingsStore {
 			})
 		);
 
-		const hotkeyHandler = async (event: KeyboardEvent) => {
-			const configuredHotkey = settings.createClipHotkey;
-			if (!configuredHotkey) return;
+		// Register the clip hotkey as a GLOBAL shortcut so it works even when
+		// the game has focus. A plain document keydown listener only fires
+		// when the Peppi window has focus, which is never during gameplay.
+		this.registerClipHotkey();
+	}
 
-			const pressedKey = this.formatHotkey(event);
-			if (pressedKey === configuredHotkey) {
-				event.preventDefault();
-				await this.handleCreateClip();
-			}
-		};
+	/** Currently-registered global hotkey (so we can unregister/re-register on change) */
+	private registeredHotkey: string | null = null;
 
-		document.addEventListener("keydown", hotkeyHandler);
-		this.extraCleanupFns.push(() => document.removeEventListener("keydown", hotkeyHandler));
+	/** Register the configured clip hotkey globally */
+	private async registerClipHotkey(): Promise<void> {
+		const configured = this.toAcceleratorString(settings.createClipHotkey);
+		if (!configured) return;
+
+		try {
+			await registerShortcut(configured, (event) => {
+				// Only fire on press (not release) to avoid double-triggering
+				if (event.state === "Pressed") {
+					this.handleCreateClip();
+				}
+			});
+			this.registeredHotkey = configured;
+			this.extraCleanupFns.push(async () => {
+				if (this.registeredHotkey) {
+					try {
+						await unregisterShortcut(this.registeredHotkey);
+					} catch (e) {
+						console.warn("Failed to unregister hotkey:", e);
+					}
+					this.registeredHotkey = null;
+				}
+			});
+			console.log("[Hotkey] Registered global clip hotkey:", configured);
+		} catch (error) {
+			console.error("[Hotkey] Failed to register global clip hotkey:", error);
+		}
+	}
+
+	/** Convert Peppi's hotkey format ("Ctrl+Shift+F9") to Tauri's accelerator format. */
+	private toAcceleratorString(hotkey: string): string | null {
+		if (!hotkey) return null;
+		// Peppi and Tauri largely match; just normalize modifiers.
+		return hotkey
+			.split("+")
+			.map((p) => p.trim())
+			.map((p) => {
+				const lower = p.toLowerCase();
+				if (lower === "ctrl" || lower === "control") return "Control";
+				if (lower === "cmd" || lower === "meta") return "CommandOrControl";
+				if (lower === "alt") return "Alt";
+				if (lower === "shift") return "Shift";
+				return p; // Letter or F-key
+			})
+			.join("+");
 	}
 
 	/** Clean up all event listeners */

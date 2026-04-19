@@ -27,7 +27,7 @@ use commands::library::{
     save_computed_stats, list_slp_files, check_slp_synced,
 };
 // Recording commands
-use commands::recording::{start_generic_recording, start_recording, stop_recording, ensure_obs_ready, install_obs};
+use commands::recording::{start_generic_recording, start_recording, stop_recording, ensure_obs_ready, install_obs, init_recorder_on_startup};
 // Settings commands
 use commands::settings::{
     get_recording_directory, get_setting, get_settings_path, open_settings_folder,
@@ -38,8 +38,8 @@ use commands::slippi::{
 };
 // Window commands
 use commands::window::{
-    capture_window_preview, check_game_window, get_game_process_name, highlight_game_window,
-    list_game_windows, set_game_process_name,
+    capture_window_by_pid, capture_window_preview, check_game_window, get_game_process_name,
+    highlight_game_window, list_all_windows, list_game_windows, set_game_process_name,
 };
 
 use tauri::Manager;
@@ -53,6 +53,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::default().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // Initialize logging first (so we can see database init logs)
             if cfg!(debug_assertions) {
@@ -86,6 +87,10 @@ pub fn run() {
                 }
             });
 
+            // Initialize OBS recorder once at startup so we don't spawn OBS
+            // on every recording.
+            init_recorder_on_startup(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -105,7 +110,9 @@ pub fn run() {
             open_recording_folder,
             check_game_window,
             capture_window_preview,
+            capture_window_by_pid,
             list_game_windows,
+            list_all_windows,
             get_game_process_name,
             set_game_process_name,
             highlight_game_window,

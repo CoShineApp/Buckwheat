@@ -120,17 +120,25 @@ fn write_scene_config(scenes_dir: &Path) -> Result<(), String> {
 }
 
 /// Returns the platform-appropriate capture source for OBS scenes.
-/// Windows: game_capture (any_fullscreen) — hooks into the running game directly.
+/// Windows: game_capture in "window" mode targeting Slippi Dolphin by executable.
+///          (any_fullscreen doesn't work because Slippi usually runs windowed.)
 /// macOS: display_capture (ScreenCaptureKit) — captures the display showing the game.
 fn platform_capture_source() -> serde_json::Value {
     #[cfg(target_os = "windows")]
     {
+        // Format: "title:class:executable". Priority 2 = match by executable,
+        // which is stable across ROM loads (title changes, exe doesn't).
         serde_json::json!({
             "id": "game_capture",
-            "name": "Game Capture",
+            "name": "Slippi Dolphin",
             "settings": {
-                "capture_mode": "any_fullscreen",
+                "capture_mode": "window",
+                "window": "Slippi Dolphin:wxWindowNR:Slippi Dolphin.exe",
+                "priority": 2,
                 "capture_cursor": false,
+                "allow_transparency": false,
+                "limit_framerate": false,
+                "capture_overlays": false,
                 "anti_cheat_hook": true,
                 "hook_rate": 1
             },

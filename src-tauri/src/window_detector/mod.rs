@@ -18,12 +18,25 @@ pub use types::GameWindow;
 #[cfg(target_os = "windows")]
 pub use capture::capture_window_preview;
 #[cfg(target_os = "windows")]
-pub use windows::{check_game_window_open, find_game_windows, highlight_window};
+pub use windows::{
+    check_game_window_open, check_window_by_process, find_all_windows, find_game_windows,
+    highlight_window,
+};
 
 // Stubs for non-Windows platforms
 #[cfg(not(target_os = "windows"))]
 pub fn find_game_windows() -> Vec<GameWindow> {
     Vec::new()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn find_all_windows() -> Vec<GameWindow> {
+    Vec::new()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn check_window_by_process(_process_name: &str) -> bool {
+    false
 }
 
 #[cfg(not(target_os = "windows"))]

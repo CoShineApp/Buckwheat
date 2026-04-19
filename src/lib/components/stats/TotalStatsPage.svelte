@@ -130,7 +130,10 @@
 		stages: number[];
 	}
 
-	let loading = $state(true);
+	// Starts false — otherwise "Crunching the numbers..." shows forever when
+	// there's no slippiCode (effect doesn't run loadStats, so loading never
+	// transitions to false).
+	let loading = $state(false);
 	let stats = $state<AggregatedStats | null>(null);
 	let error = $state<string | null>(null);
 	let filterOptions = $state<AvailableFilterOptions | null>(null);

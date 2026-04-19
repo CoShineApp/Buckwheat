@@ -9,7 +9,9 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(\"C:/Program Files/obs-studio/bin/64bit/obs64.exe\" --version)",
       "WebFetch(domain:github.com)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(bun run:*)",
+      "Bash(cargo add:*)"
     ]
   }
 }

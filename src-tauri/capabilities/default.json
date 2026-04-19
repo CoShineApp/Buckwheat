@@ -55,6 +55,10 @@
 	  "fs:allow-download-read-recursive",
 	  "updater:default",
 	  "process:allow-restart",
-	  "process:allow-exit"
+	  "process:allow-exit",
+	  "global-shortcut:allow-register",
+	  "global-shortcut:allow-unregister",
+	  "global-shortcut:allow-unregister-all",
+	  "global-shortcut:allow-is-registered"
 	]
 }

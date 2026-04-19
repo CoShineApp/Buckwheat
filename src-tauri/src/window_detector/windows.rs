@@ -20,6 +20,96 @@ struct ChildEnumContext {
     parent_pid: u32,
 }
 
+/// Enumerate all visible top-level windows with a title, regardless of app.
+/// Used by the capture window picker so users can select any app to record.
+pub fn find_all_windows() -> Vec<GameWindow> {
+    let mut sys = System::new_all();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All);
+
+    let mut pid_to_name: HashMap<u32, String> = HashMap::new();
+    for (pid, process) in sys.processes() {
+        pid_to_name.insert(pid.as_u32(), process.name().to_string_lossy().to_string());
+    }
+
+    let mut windows: Vec<GameWindow> = Vec::new();
+
+    unsafe {
+        let _ = EnumWindows(
+            Some(enum_windows_callback),
+            LPARAM(&mut windows as *mut Vec<GameWindow> as isize),
+        );
+    }
+
+    for w in &mut windows {
+        if let Some(name) = pid_to_name.get(&w.process_id) {
+            w.process_name = name.clone();
+        }
+    }
+
+    // Keep only real windows: has title, visible, reasonable size
+    windows.retain(|w| {
+        !w.window_title.trim().is_empty()
+            && !w.is_cloaked
+            && w.width >= 200
+            && w.height >= 100
+    });
+
+    // De-duplicate
+    let mut seen: HashSet<String> = HashSet::new();
+    windows.retain(|w| {
+        let key = format!("{}:{}:{}", w.process_id, w.class_name, w.window_title);
+        seen.insert(key)
+    });
+
+    // Sort game candidates first, then alphabetical by title
+    windows.sort_by(|a, b| {
+        let a_game = a.matches_game_keywords();
+        let b_game = b.matches_game_keywords();
+        match (a_game, b_game) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.window_title.to_lowercase().cmp(&b.window_title.to_lowercase()),
+        }
+    });
+
+    windows
+}
+
+/// Check if any visible window exists for a process matching the given name.
+/// Case-insensitive substring match on the process executable name.
+pub fn check_window_by_process(process_name: &str) -> bool {
+    let needle = process_name.to_lowercase();
+
+    let mut sys = System::new_all();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All);
+
+    let matching_pids: HashSet<u32> = sys
+        .processes()
+        .iter()
+        .filter(|(_, p)| p.name().to_string_lossy().to_lowercase().contains(&needle))
+        .map(|(pid, _)| pid.as_u32())
+        .collect();
+
+    if matching_pids.is_empty() {
+        return false;
+    }
+
+    let mut windows: Vec<GameWindow> = Vec::new();
+    unsafe {
+        let _ = EnumWindows(
+            Some(enum_windows_callback),
+            LPARAM(&mut windows as *mut Vec<GameWindow> as isize),
+        );
+    }
+
+    windows.iter().any(|w| {
+        matching_pids.contains(&w.process_id)
+            && !w.is_cloaked
+            && w.width >= 200
+            && w.height >= 100
+    })
+}
+
 /// Find all potential game windows (Slippi/Dolphin)
 pub fn find_game_windows() -> Vec<GameWindow> {
     // Get all processes

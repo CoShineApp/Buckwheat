@@ -79,6 +79,9 @@ pub trait Recorder {
     ) -> Result<(), Error>;
     fn stop_recording(&mut self) -> Result<String, Error>;
     fn is_recording(&self) -> bool;
+
+    /// Optional: tell the recorder which window to capture. Default impl is a no-op.
+    fn set_target_window(&mut self, _window: Option<crate::obs::connection::GameWindowInfo>) {}
 }
 
 /// Create a recorder that connects to the user's running OBS instance.
