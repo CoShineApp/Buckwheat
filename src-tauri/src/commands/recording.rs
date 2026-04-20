@@ -62,22 +62,31 @@ pub async fn stop_recording(
         // Keep the recorder + OBS connection alive so we don't re-launch OBS every recording.
         // The recorder is dropped when the app exits (see lib.rs RunEvent::Exit handler).
 
-        // Log any clip markers
+        // Reattach any pending clip markers to the recording that just stopped.
+        // Markers are created with the app's intended output path (e.g.
+        // "Manual_....mp4"), but OBS writes to its own filename. Since markers
+        // only accumulate during an active recording, every pending marker
+        // belongs to the one we just stopped — rewrite their recording_file to
+        // match so process_clip_markers can find them.
         let marker_snapshot = {
-            let markers = state.clip_markers.lock().map_err(|e| {
+            let mut markers = state.clip_markers.lock().map_err(|e| {
                 Error::InitializationError(format!("Failed to lock clip markers: {}", e))
             })?;
-            markers
-                .iter()
-                .filter(|m| m.recording_file == output_path)
-                .map(|m| m.timestamp_seconds)
-                .collect::<Vec<_>>()
+            for m in markers.iter_mut() {
+                m.recording_file = output_path.clone();
+            }
+            markers.iter().map(|m| m.timestamp_seconds).collect::<Vec<_>>()
         };
 
         if marker_snapshot.is_empty() {
             log::info!("No clip markers queued for {}", output_path);
         } else {
-            log::info!("Clip markers for {}: {:?}", output_path, marker_snapshot);
+            log::info!(
+                "Reattached {} clip marker(s) to {}: {:?}",
+                marker_snapshot.len(),
+                output_path,
+                marker_snapshot
+            );
         }
 
         if let Err(e) = app.emit(recording_events::STOPPED, output_path.clone()) {

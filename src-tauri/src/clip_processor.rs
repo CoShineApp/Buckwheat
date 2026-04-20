@@ -3,6 +3,33 @@ use ffmpeg_sidecar::command::FfmpegCommand;
 use ffmpeg_sidecar::download::auto_download;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::time::Duration;
+
+/// Wait for a video file's size to stop changing, so FFmpeg can read a
+/// fully-flushed MP4 (OBS writes the moov atom at the end on stop).
+/// Polls up to `timeout` total, giving up but returning Ok — caller will
+/// still try to run FFmpeg and surface any error.
+fn wait_for_file_finalized(path: &str, timeout: Duration) {
+    let poll = Duration::from_millis(250);
+    let start = std::time::Instant::now();
+    let mut last_size: u64 = 0;
+    let mut stable_checks = 0;
+
+    while start.elapsed() < timeout {
+        let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if size > 0 && size == last_size {
+            stable_checks += 1;
+            if stable_checks >= 2 {
+                // Two consecutive identical sizes — assume flush is done.
+                return;
+            }
+        } else {
+            stable_checks = 0;
+        }
+        last_size = size;
+        std::thread::sleep(poll);
+    }
+}
 
 /// Represents a crop region with position and dimensions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +70,11 @@ pub fn extract_clip(
         )));
     }
 
+    // OBS writes MP4 moov atom on stop; briefly wait for the file to be
+    // fully flushed before handing it to FFmpeg. Otherwise FFmpeg fails
+    // with status 0xBEBAFEF7 because the container index isn't there yet.
+    wait_for_file_finalized(input_path, Duration::from_secs(10));
+
     // Ensure output directory exists
     if let Some(parent) = Path::new(output_path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
@@ -68,6 +100,19 @@ pub fn extract_clip(
 
     match result {
         Ok(mut child) => {
+            // Drain FFmpeg's stderr so its pipe doesn't fill and it can
+            // exit cleanly — and so we can log the real reason if it fails.
+            let mut stderr_output = String::new();
+            if let Some(stderr) = child.take_stderr() {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    log::debug!("FFmpeg: {}", line);
+                    stderr_output.push_str(&line);
+                    stderr_output.push('\n');
+                }
+            }
+
             let status = child
                 .wait()
                 .map_err(|e| Error::RecordingFailed(format!("FFmpeg process error: {}", e)))?;
@@ -76,9 +121,19 @@ pub fn extract_clip(
                 log::info!("✅ Clip extracted successfully: {}", output_path);
                 Ok(())
             } else {
+                let last_lines: String = stderr_output
+                    .lines()
+                    .rev()
+                    .take(10)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                log::error!("FFmpeg extract_clip failed. Last output:\n{}", last_lines);
                 Err(Error::RecordingFailed(format!(
-                    "FFmpeg failed with status: {:?}",
-                    status
+                    "FFmpeg failed with status {:?}: {}",
+                    status, last_lines
                 )))
             }
         }
@@ -113,6 +168,10 @@ pub fn generate_thumbnail(
         )));
     }
 
+    // Same finalization wait as extract_clip — OBS flushes the MP4 moov
+    // atom asynchronously on stop.
+    wait_for_file_finalized(video_path, Duration::from_secs(10));
+
     // Ensure output directory exists
     if let Some(parent) = Path::new(thumbnail_path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
@@ -143,6 +202,17 @@ pub fn generate_thumbnail(
 
     match result {
         Ok(mut child) => {
+            let mut stderr_output = String::new();
+            if let Some(stderr) = child.take_stderr() {
+                use std::io::{BufRead, BufReader};
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    log::trace!("FFmpeg(thumb): {}", line);
+                    stderr_output.push_str(&line);
+                    stderr_output.push('\n');
+                }
+            }
+
             let status = child
                 .wait()
                 .map_err(|e| Error::RecordingFailed(format!("FFmpeg process error: {}", e)))?;
@@ -151,9 +221,18 @@ pub fn generate_thumbnail(
                 log::debug!("✅ Thumbnail generated successfully: {}", thumbnail_path);
                 Ok(())
             } else {
+                let last_lines: String = stderr_output
+                    .lines()
+                    .rev()
+                    .take(5)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 Err(Error::RecordingFailed(format!(
-                    "FFmpeg failed with status: {:?}",
-                    status
+                    "FFmpeg thumbnail failed with status {:?}: {}",
+                    status, last_lines
                 )))
             }
         }
